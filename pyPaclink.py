@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import sys
 import os
 import socket
@@ -8,6 +10,11 @@ import email
 import struct
 import time
 import re
+import pickle
+import smtplib
+from datetime import datetime
+
+MAILDIR = "/home/mark/Maildir"
 
 sys.path.insert(0, "..")
 
@@ -96,7 +103,7 @@ def run_lzhuf_encode(data):
     return lzh
 
 class WinLinkMessage:
-    def __init__(self, header=None):
+    def __init__(self, header=None, email=None):
         self.__name = ""
         self.__content = ""
         self.__usize = self.__csize = 0
@@ -110,6 +117,9 @@ class WinLinkMessage:
 
             if int(off) != 0:
                 raise Exception("Offset support not implemented")
+
+        if email:
+            self.from_email(email)
 
     def __decode_lzhuf(self, data):
         return run_lzhuf_decode(data)
@@ -220,6 +230,72 @@ class WinLinkMessage:
         return "FC %s %s %i %i 0" % (self.__type, self.__id,
                                      self.__usize, self.__csize)
 
+    def get_contect(self):
+        print(self.__content)
+
+    def from_email(self, e):
+        text = e.get_payload()
+
+        m  = 'MID: %s\r\n'%(e['Message-ID'])
+        m += 'Date: %s\r\n'%(e['Date'])
+        m += 'Type: Private\r\n'
+        m += 'From: smtp:%s\r\n'%(e['From'])
+        #m += 'From: smtp:"Tuuletar"\r\n'
+        m += 'To: smtp:%s\r\n'%(e['To'])
+        #m += 'To: smtp:"sv.tuuletar" <sv.tuuletar@gmail.com>\r\n'        
+        m += 'Subject: %s\r\n'%(e['Subject'])
+        #m += 'Mbo: VJN4455\r\n'
+        #m += 'X-AM-RCPT: %s\r\n'%(re.findall('<.*>', e['To'])[0].strip('<>'))
+        #m += 'X-AM-RCPT: sv.tuuletar@gmail.com\r\n'
+        m += 'Body: %i\r\n\r\n'%(len(text))
+        m += '%s\r\n'%(text)
+
+        self.set_id(e['Message-ID'])
+        self.set_content(m, name=e['Message-ID'])
+
+    def to_email(self):
+        e = email.message_from_string( self.get_content() )
+        for key in ['From', 'To']:
+            if e.has_key(key):
+                e.replace_header(key, e[key].replace('smtp:',''))
+        # Convert the date/time format
+        try:
+            t = datetime.strptime(e['Date'], '%Y/%m/%d %H:%M')
+            e.replace_header('Date', t.strftime('%a, %d %b %Y %H:%M:%S +0000'))
+        except:
+            print("Cannot change date format.  Leaving as is.")
+
+        # Separate out any attachments
+        if e.has_key('File'):
+            return self.makeMultipart(e)
+        return e
+
+    def makeMultipart(self, e):
+        b = int(e['Body'])
+        (size, fname) = e['File'].split(' ')
+        size = int(size)
+        body_text = e.get_payload()[:(b+2)]
+        a = e.get_payload()[(b+2):(b+2+size)]
+
+        # Create a new multipart email and copy header
+        emailMsg = email.MIMEMultipart.MIMEMultipart()
+        for key in e.keys():
+            if emailMsg.has_key(key):
+                emailMsg.replace_header(key, e[key])
+            else:
+                emailMsg[key] = e[key]
+
+        # Attach the text as the main body
+        emailMsg.attach( email.MIMEText.MIMEText(e.get_payload()[:(b+2)]) )
+
+        # Attach the binary component
+        fileMsg = email.MIMEBase.MIMEBase('application','octet-stream')
+        fileMsg.set_payload(a)
+        email.Encoders.encode_base64(fileMsg)
+        fileMsg.add_header('Content-Disposition','attachment;filename=%s'%(fname))
+        emailMsg.attach(fileMsg)
+        return emailMsg
+
 class WinLinkCMS:
     def __init__(self, callsign):
         self._callsign = callsign
@@ -258,6 +334,8 @@ class WinLinkCMS:
             return True
         elif line.startswith("FS"):
             return True
+        elif line.startswith("FF"):
+            return True
         elif line.startswith("*** Error"):
             return True
         return False
@@ -284,7 +362,7 @@ class WinLinkCMS:
             for l in resp.split("\r"):
                 if l.startswith("FC"):
                     print "Creating message for %s" % l
-                    msgs.append(WinLinkMessage(l))
+                    msgs.append(WinLinkMessage(header=l))
                 elif l.startswith("F>"):
                     reading = False
                     break
@@ -315,7 +393,7 @@ class WinLinkCMS:
                     raise
                     #print e
                     
-            self._send("FQ")
+            #self._send("FQ")
         else:
             print("No messages.")
 
@@ -389,6 +467,7 @@ class WinLinkTelnet(WinLinkCMS):
         self._conn.connect((self.__server, self.__port))
 
     def _disconnect(self):
+        self._send("FQ")
         self._conn.close()
         print("Connection closed")
 
@@ -424,9 +503,7 @@ class WinLinkRMSPacket(WinLinkCMS):
         resp = self._recv()
         self._send_ssid(resp)
 
-
-if __name__=="__main__":
-    
+def test_telnet():
     # Test Telnet connection
     wl = WinLinkTelnet("VJN4455")
     print("Getting messages")
@@ -435,8 +512,7 @@ if __name__=="__main__":
     for i in range(0, count):
         print "--Message %i--\n%s\n--End--\n\n" % (i, wl.get_message(i).get_content())
 
-    sys.exit()
-
+def test_rms():
     # Test RMS connection
     agwc = agw.AGWConnection("127.0.0.1", 8000, 0.5)
     wl = WinLinkRMSPacket("KK7DS", "N7AAM-11", agwc)
@@ -444,7 +520,8 @@ if __name__=="__main__":
     print "%i messages" % count
     for i in range(0, count):
         print "--Message %i--\n%s\n--End--\n\n" % (i, wl.get_message(i).get_content())
-    
+
+def test_send():
     # Test create a new message:
     text = "This is a test."
     _m = """MID: 1326_VJN4455\r
@@ -465,4 +542,80 @@ Body: %i\r
     m.set_content(_m, name="TEST TEST")
     wl = WinLinkTelnet("VJN4455")
     wl.send_messages([m])
+
+class OutQueue():
+
+    def __init__(self, MAILDIR = "/home/mark/Maildir"):
+        self.queue_file = "%s/outqueue"%(MAILDIR)
+        self.email_list = []
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.queue_file):
+            f = open( self.queue_file, "rb" )
+            self.email_list = pickle.load( f )
+            f.close()
+        else:
+            self.email_list = []
+        print("Found %i emails queued"%(len(self.email_list)) )
+
+    def message_list(self):
+        return [WinLinkMessage(email=e) for e in self.email_list]
+
+    def put(self, email):
+        self.email_list.append(email)
+
+    def remove(self, indexes):
+        # Remove emails from the back
+        indexes.sort()
+        indexes.reverse()
+        for i in indexes:
+            self.email_list.pop(i)
+            print("Removed message %i from outbox"%(i))
+        self.save()
+
+    def save(self):
+        f = open( self.queue_file, "wb" )
+        pickle.dump( self.email_list, f )
+        f.close()
+    
+    def length(self):
+        return len(self.email_list)
+
+if __name__== "__main__":
+    print("Checking email with Telnet")
+    q = OutQueue()
+
+    if q.length() > 0:
+        print("Compressing email messages for sending")
+        message_list = q.message_list()
+
+    print("Connecting to telnet server")
+    wl = WinLinkTelnet("VJN4455")
+    wl._connect()
+    wl._login()
+
+    if q.length() > 0:
+        print("Sending Messages")
+        success = wl.send_messages(message_list)
+        if success:
+            q.remove(range(q.length()))
+
+    print("Getting messages")
+    count = wl.get_messages()
+    wl._disconnect()
+
+    print("Forwarding %i retrieved messages to localhost"%(count))
+    sender = 'mark@localhost'
+    receivers = ['mark@localhost']
+    s = smtplib.SMTP('localhost')
+    for i in range(0, count):
+        e = wl.get_message(i).to_email()
+        s.sendmail(sender, receivers, e.as_string() ) 
+    s.close()
+
+    
+      
+   
+
 

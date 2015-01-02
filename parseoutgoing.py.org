@@ -1,0 +1,10 @@
+#!/usr/bin/python
+
+import sys
+
+if __name__ == "__main__":
+    #full_msg = sys.stdin.read()
+    f = open("parseout.txt",'w')
+    f.write("SUCCESS")
+    f.close()
+
