@@ -1,0 +1,168 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+<title>How to use the SCS PTC-IIusb (and any other 'usb' tnc) with Linux / ftdi_sio kernel module</title>
+</head>
+<body>
+<center>
+<h4>How to use the SCS PTC-IIusb (and any other 'usb' tnc) with Linux / ftdi_sio kernel module</h4>
+</center>
+<h4><u>Introduction</u></h4>
+I think it's safe to say that the RS232 serial port is slated for the 
+history
+books. Try and buy a PC today, and you'll probably notice it's all USB, 
+and no
+serial ports anymore. So how are we supposed to get our old TNC that 
+still has
+the RS232 serial port on it working ? The answer is in the form of a 
+SERIAL to
+USB adaptor. It lets you plug your old TNC into a USB equipped PC. If 
+you have
+never owned a TNC before, the new generation of TNC comes with USB only.
+ In the case of SCS, they offer the PTC II-usb modem, a Pactor III power
+ house. The firmware is still SERIAL, but they have put a SERIAL to USB 
+convertor into the unit for you so you don't have to buy one. Just plug 
+it into your USB equipped PC and you're ready to roll. All you need is 
+something on the operating system side so that your old SERIAL 
+applications can still function.
+<br><br>
+<font color="red">It's important to note that this article only applies 
+to the type of USB TNC where the firmware is still written using SERIAL 
+I/O - the manufacturer has just slapped a SERIAL to USB convertor inside
+ the TNC. The firmware is still writing to a serial device. I think it's
+ very important to make that distinguishment.</font>
+<br><br>
+I would expect some years from now (perhaps it's already being down by 
+some TNC manufacturers) that the TNC firmware itself will use pure USB 
+(no more serial conversion), in which case applications on the operating
+ system side would have to switch to a pure USB api as well, removing 
+the need for SERIAL to USB conversion. In the case of linux, one could 
+use the <b>libusb</b> libraries, or write a kernel module instead.
+<br><br>
+Currently for linux, there is a kernel module called <b>usbserial</b> which includes another module called <b>ftdi_sio</b>,
+ which when run, provides your old SERIAL applications (like minicom, 
+Kptc, or JNOS 2.0) with a pseudo tty (/dev/ttyUSB0) that can be used to 
+communicate with the TNC as if it was connected to a standard RS232 
+serial port. When you plug a USB TNC (or a serial port equipped TNC with
+ a serial to USB convertor) into the USB port on the linux PC, the 
+kernel module is supposed to come up automatically and then you run your
+ application using the pseudo tty device above.
+<h4><u>SCS PTC II-usb requires patching the ftdi_sio kernel module source</u></h4>
+You will need to install the kernel source for your particular kernel if
+ you are to patch the ftdi_sio kernel module. I'll leave it to you to 
+figure out how to do that. If you can't do that, then as far as I am 
+concerned, you should not be patching a kernel to begin with. This is 
+serious stuff, you don't want to mess up your operating system, and by 
+compiling your own modules, you risk doing that. Once you have the 
+source installed, follow along using my <b><u>example</u></b> below.
+<br><br>
+<font color="red">*** Pay attention to your current kernel version you are running and the file paths you use below !!!</font>
+<br><br>
+<b>1.</b> Find the correct source directory, in my case (fedora core 3 system) :
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cd /usr/src/redhat/BUILD/kernel-2.6.12/linux-2.6.12/drivers/usb/serial
+<br><br>
+<b>2.</b> Edit the file ftdi_sio.h, and add the following 8 lines :
+<pre>#define FTDI_SCS_DEVICE_1_PID 0xD010   /* SCS PTC-IIusb */
+#define FTDI_SCS_DEVICE_2_PID 0xD011   /* SCS Tracker / DSP TNC */
+#define FTDI_SCS_DEVICE_3_PID 0xD012
+#define FTDI_SCS_DEVICE_4_PID 0xD013
+#define FTDI_SCS_DEVICE_5_PID 0xD014
+#define FTDI_SCS_DEVICE_6_PID 0xD015
+#define FTDI_SCS_DEVICE_7_PID 0xD016
+#define FTDI_SCS_DEVICE_8_PID 0xD017
+</pre>
+AFTER the following line that already exists in the file :
+<pre>#define FTDI_NF_RIC_PID 0x0001  /* Product Id */
+</pre>
+<b>3.</b> Edit the file ftdi_sio.c, and insert the following 8 lines :
+<pre>        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_1_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_2_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_3_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_4_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_5_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_6_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_7_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_8_PID) },
+</pre>
+at the BEGINNING of the array initializers for the following 2 structure arrays that already exist in the file :
+<pre>static struct usb_device_id id_table_FT232BM [] = 
+static struct usb_device_id id_table_combined [] = 
+</pre>
+So AFTER you modify them, they should start out something like the following :
+<pre>static struct usb_device_id id_table_FT232BM [] = {
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_1_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_2_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_3_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_4_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_5_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_6_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_7_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_8_PID) },
+        { USB_DEVICE_VER(FTDI_VID, FTDI_IRTRANS_PID, 0x400, 0xffff) },
+        { USB_DEVICE_VER(FTDI_VID, FTDI_8U232AM_PID, 0x400, 0xffff) },
+        ...
+};
+
+AND
+
+static struct usb_device_id id_table_combined [] = {
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_1_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_2_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_3_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_4_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_5_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_6_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_7_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SCS_DEVICE_8_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_IRTRANS_PID) },
+        { USB_DEVICE(FTDI_VID, FTDI_SIO_PID) },
+        ...
+};
+</pre>
+The SCS PTC-IIusb uses the FM232BM chipset - that's why we use that structure array.
+<h4><u>Building the kernel module, and installing it</u></h4>
+<b>1.</b> Change to the source root directory (on my fedora core 3 system) :
+<pre> cd /usr/src/redhat/BUILD/kernel-2.6.12/linux-2.6.12
+</pre>
+<b>2.</b> Build the module (on my fedora core 3 system) :
+<pre> make drivers/usb/serial/
+
+* The trailing slash (/) is very important, don't forget it !
+</pre>
+<b>3.</b> Install the new ftdi_sio kernel module (on my fedora core 3 system) :
+<pre> cp drivers/usb/serial/ftdi_sio.ko /lib/modules/2.6.12-1.1381_FC3/kernel/drivers/usb/serial/ftdi_sio.ko
+</pre>
+<h4><u>That's it - you're ready to use your TNC via the pseudo tty</u></h4>
+Tail the main log file, using the following command :
+<pre>tail -f /var/log/messages
+</pre>
+Now plug your TNC into any USB port on your linux box. If all goes well, you should see something like this :
+<pre>May 11 09:02:24 jedi kernel: usb 3-1: USB disconnect, address 3
+May 11 09:02:30 jedi kernel: usb 3-1: new full speed USB device using uhci_hcd and address 4
+May 11 09:02:31 jedi kernel: usbcore: registered new driver usbserial
+...
+May 11 09:02:31 jedi kernel: drivers/usb/serial/usb-serial.c: USB Serial support registered for FTDI FT232BM Compatible
+...
+May 11 09:02:31 jedi kernel: ftdi_sio 3-1:1.0: FTDI FT232BM Compatible converter detected
+May 11 09:02:31 jedi kernel: usb 3-1: FTDI FT232BM Compatible converter now attached to ttyUSB0
+May 11 09:02:31 jedi kernel: usbcore: registered new driver ftdi_sio
+May 11 09:02:31 jedi kernel: drivers/usb/serial/ftdi_sio.c: v1.4.2:USB FTDI Serial Converters Driver
+</pre>
+Notice the /dev/ttyUSB0 - it's the device (tty) you use in your application. Try running minicom on it to test.
+<h4><u>Application Note - specific to JNOS 2.0</u></h4>
+For the linux version of JNOS 2.0, attach the SCS PTC-IIusb as an HF device :
+<pre>#
+# Attach a HFDD - SCS PTC-IIusb Pactor Modem
+#
+attach asy ttyUSB0 - hfdd ptc 4096 256 38400
+#
+ifconfig ptc desc "hf - Pactor on 20/30/40"
+#
+param ptc Pactor 1
+#
+</pre>
+* Written by Maiko Langelaar / VE4KLM on May 11, 2007
+<br><br>
+
+
+</body></html>
