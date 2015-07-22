@@ -1,0 +1,33 @@
+2014/11/11 03:02:28 PTC-IIex modem initialized OK
+< Modem serial#: 0100000FF4A7EBAE >
+< Professional (Pactor-3) firmware ver: 3.8, P-3 license OK >
+2014/11/11 03:02:53 Calling ZKN2SM on 16563.5 kHz
+2014/11/11 03:02:57 Connected to ZKN2SM
+[30]vjn4455
+<Pactor3: , Speed= 200, Freq= +19>
+[Sailmail-3.5.057-B2FHIM$]
+(am|em:h3z,g:AH50aw)
+{SFI = 136 on 2014/11/11 00:03z}
+
+Welcome to Sailmail R21 Niue!
+VJN4455 de ZKN2SM QTC 4 msg 3362 char>
+[AirMail-3.3.081-B2FHIM$]
+;(am|em:h1,g:AH00ru)
+; ZKN2SM de VJN4455
+FF
+; VJN4455 de ZKN2SM QTC: 4 2881 1882
+FC EM VJN4455_434 967 535 0
+FC EM VJN4455_435 713 486 0
+FC EM VJN4455_436 659 432 0
+FC EM VJN4455_437 542 429 0
+F> 3B
+FS YYYY
+Receiving VJN4455_434 "New Mail"...Decoded OK
+Receiving VJN4455_435 "New Mail"...Decoded OK
+Receiving VJN4455_436 "New Mail"...Decoded OK
+Receiving VJN4455_437 "New Mail"...Decoded OK
+; ZKN2SM de VJN4455
+FF
+FQ
+; VJN4455 de ZKN2SM SK
+2014/11/11 03:08:33 Disconnected from ZKN2SM

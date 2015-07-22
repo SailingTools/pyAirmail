@@ -203,7 +203,7 @@ class WinLinkMessage:
 
             for i in chunk:
                 cs += ord(i)
-
+            
             s.send(struct.pack("BB", FBB_BLOCK_DAT, len(chunk)) + chunk)
 
         # Checksum, mod 256, two's complement
@@ -545,7 +545,7 @@ Body: %i\r
 
 class OutQueue():
 
-    def __init__(self, MAILDIR = "/home/mark/Maildir"):
+    def __init__(self, MAILDIR = "/home/cubie/Maildir"):
         self.queue_file = "%s/outqueue"%(MAILDIR)
         self.email_list = []
         self.load()
@@ -582,6 +582,7 @@ class OutQueue():
     def length(self):
         return len(self.email_list)
 
+import pdb
 if __name__== "__main__":
     print("Checking email with Telnet")
     q = OutQueue()
@@ -602,12 +603,13 @@ if __name__== "__main__":
             q.remove(range(q.length()))
 
     print("Getting messages")
+    #pdb.set_trace()
     count = wl.get_messages()
     wl._disconnect()
 
     print("Forwarding %i retrieved messages to localhost"%(count))
-    sender = 'mark@localhost'
-    receivers = ['mark@localhost']
+    sender = 'cubie@localhost'
+    receivers = ['cubie@localhost']
     s = smtplib.SMTP('localhost')
     for i in range(0, count):
         e = wl.get_message(i).to_email()

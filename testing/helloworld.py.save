@@ -1,0 +1,13 @@
+"""
+Simple example of a Qt4 interface more examples here:
+
+#
+
+import sys
+from PyQt4.QtGui import *
+app = QApplication(sys.argv)
+button = QPushButton("Hello World", None)
+button.show()
+app.exec_()
+
+/usr/share/doc/python-qt4-doc/examples

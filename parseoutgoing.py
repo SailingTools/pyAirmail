@@ -12,7 +12,7 @@ import email
 import pickle
 import os
 
-from pyPaclink import OutQueue
+from sailmail import OutQueue
 
 if __name__ == "__main__":
 

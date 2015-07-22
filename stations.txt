@@ -1,0 +1,186 @@
+{
+"frequencies": {
+"OSY": [
+6330.5, 
+8422, 
+12580.5, 
+16684.5
+], 
+"WPTG385": [
+2720.8, 
+5859.4, 
+7941.4, 
+10361.4, 
+13906.4, 
+18376.4, 
+22881.4
+], 
+"XJN714": [
+4805, 
+7822, 
+10523, 
+13937, 
+14436.2, 
+18234, 
+21866
+], 
+"KZN508": [
+2656.4, 
+5876.4, 
+7961.4, 
+7981.4, 
+10331, 
+13998, 
+18618, 
+18630
+], 
+"KUZ533": [
+2701.4, 
+5836, 
+7957.4, 
+10325, 
+13930, 
+18264
+], 
+"HPPM2": [
+2650, 
+5870, 
+10329, 
+13980, 
+18610, 
+22643
+], 
+"WHV382": [
+2794.4, 
+5830, 
+7995, 
+10315, 
+13940, 
+18277
+], 
+"ZKN2SM": [
+4168.0, 
+6241.5, 
+8308.5, 
+12373.5, 
+16563.5, 
+18856.5
+], 
+"V8V2222": [
+5212, 
+6305, 
+7962, 
+8399, 
+10323, 
+11174, 
+13426, 
+14987, 
+16786, 
+18893, 
+20373, 
+22352
+], 
+"FOHXM": [
+1919, 
+4206.5, 
+6222.4, 
+8289.4, 
+12576, 
+16785.5
+], 
+"HPPM1": [
+4075, 
+5735, 
+8185, 
+10450, 
+13880, 
+18240, 
+18440, 
+23050
+], 
+"VZX": [
+2824, 
+4162, 
+5085.8, 
+6357, 
+8442, 
+8684.5, 
+10476.2, 
+12680, 
+13513.8, 
+14436.2, 
+16908, 
+18594, 
+22649
+], 
+"CEV773": [
+2828.5, 
+5266.5, 
+10620, 
+10623, 
+13861.5, 
+13875
+], 
+"RC01": [
+5212, 
+7957.4, 
+10335, 
+10522, 
+12689, 
+12694, 
+13930, 
+13992, 
+14588, 
+18264, 
+18630, 
+22212
+], 
+"WQLI952": [
+5881.4, 
+7971.4, 
+10343, 
+13971, 
+13986, 
+18624, 
+22917.4
+], 
+"9Z4DH": [
+2212, 
+5005, 
+7405, 
+10150, 
+13548, 
+17103, 
+18172, 
+20528
+], 
+"WQAB964": [
+2759, 
+5740, 
+7380, 
+10206, 
+13874, 
+18390, 
+23060
+]
+}, 
+"stations": {
+"OSY": "JO11pg:Belgium;P3,Ro;Brugge Belgium", 
+"WPTG385": "EL17iq:Corpus Christi;P3,Ro;Texas", 
+"XJN714": "FN74uj:Lunenburg NS;P3,Ro;Nova Scotia, Canada", 
+"KZN508": "EM94lx:Rock Hill SC;P3,Ro;South Carolina", 
+"KUZ533": "BL11bh:Honolulu HI;P3,Ro;Hawaii", 
+"HPPM2": "EJ88ss:Panama-2;P3,Ro;Chiriqui, Panama", 
+"WHV382": "CN88lm:Friday Harbor WA;P3,Ro;Washington State", 
+"ZKN2SM": "AH50aw:Niue;P3,Ro;Niue", 
+"V8V2222": "OJ74fs:Brunei;P3,Ro;Brunei Darussalam", 
+"FOHXM": "BH65xm:Manihi;P3,Ro;Manihi, Tuamotus", 
+"HPPM1": "EJ88rk:Panama;P3,Ro;Chiriqui, Panama", 
+"VZX": "QF67ju:Darawank NSW;P3,Ro;New South Wales, Australia", 
+"CEV773": "FF30pf:Chile;P3,Ro;Los Lagos, Chile", 
+"RC01": "KG32qn:Africa;P3,Ro;South Africa", 
+"WQLI952": "CM96av:Watsonville CA;P3,Ro;California", 
+"9Z4DH": "FK90eo:Trinidad;P3,Ro;Chaguaramas, Trinidad", 
+"WQAB964": "DM12jr:San Diego;P3,Ro;So. California"
+}
+}
