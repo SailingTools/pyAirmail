@@ -21,8 +21,7 @@ from icom import radio
 from scheduleApp import AppScheduler
 from scannerApp import AppScanner
 from sailmailApp import AppEmail
-
-#modem = serial.Serial(port='/dev/modemSCS', baudrate=57600, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=10, xonxoff=True)
+from faxApp import AppFax
 
 def setPath(obj, path, value):
     pp = path.split('.')
@@ -49,6 +48,9 @@ class Application(ttk.Frame):
         self.nb.email = AppEmail(self.nb)
         self.nb.add(self.nb.email, text="Sailmail")
 
+        self.nb.fax = AppFax(self.nb)
+        self.nb.add(self.nb.fax, text="wxFax")
+
         self.nb.scanner = AppScanner(self.nb)
         self.nb.add(self.nb.scanner, text="Scanner")
 
@@ -73,6 +75,7 @@ class Application(ttk.Frame):
         # Load prior settings and update menu selections
         self.loadSettings()
         self.nb.email.updateMenus()
+        self.nb.fax.updateMenus()
         self.nb.scheduler.start_jobList()
 
         self.bind('<Destroy>', self.saveSettings)
@@ -98,6 +101,10 @@ class Application(ttk.Frame):
         settings = {'nb.email': {
                         'currentStation': self.nb.email.currentStation,
                         'currentFrequency': self.nb.email.currentFrequency
+                        },
+                    'nb.fax': {
+                        'currentStation': self.nb.fax.currentStation,
+                        'currentFrequency': self.nb.fax.currentFrequency
                         },
                     'nb.scheduler': {
                         'jobList': self.nb.scheduler.make_jobList()

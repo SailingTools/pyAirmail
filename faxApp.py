@@ -7,7 +7,10 @@ import json
 from icom import radio
 from widgets import LabeledEntry
 
-class AppEmail(ttk.Frame):
+import matplotlib.pyplot as plt
+import threading
+
+class AppFax(ttk.Frame):
 
     def __init__(self, master=None):
         ttk.Frame.__init__(self, master)
@@ -30,23 +33,15 @@ class AppEmail(ttk.Frame):
         stationFrame = tk.Frame(self, relief=RIDGE, borderwidth=2)
         stationFrame.pack(fill=X, expand=1)
 
-        self.connectDropDown = ttk.Combobox(stationFrame, validatecommand = self.setConnectType, validate='all', values=['Telnet', 'HF Radio'])
-        self.connectDropDown.pack(fill=X, expand=1)
-        self.connectDropDown.state(['readonly'])
-        self.connectDropDown.current(self.connectType)
-
         self.stationDropDown = ttk.Combobox(stationFrame, validatecommand = self.listLink, validate = 'all', values = self.get_stations())
         self.stationDropDown.current(self.currentStation)
-        self.stationDropDown.state(['disabled', 'readonly'])
+        self.stationDropDown.state(['readonly'])
         self.stationDropDown.pack(side=LEFT)
 
         self.freqDropDown = ttk.Combobox(stationFrame, validatecommand = self.setFrequency, validate = 'all', values = ['%.01f'%(f) for f in self.get_frequencies()] )
         self.freqDropDown.current(self.currentFrequency)
-        self.freqDropDown.state(['disabled', 'readonly'])
+        self.freqDropDown.state(['readonly'])
         self.freqDropDown.pack(side=RIGHT)
-
-        self.textbox = tk.Text(self)
-        self.textbox.pack(fill=X, expand=1)
 
         self.button_connect = tk.Button(self, text="Connect", command=self.connect)
         self.button_connect.pack(side=LEFT)
@@ -71,7 +66,7 @@ class AppEmail(ttk.Frame):
 
     def setFrequency(self):
         self.currentFrequency = self.freqDropDown.current()
-        freq = int(self.get_current_frequency()*10) - 15
+        freq = int(self.get_current_frequency()*10) - 19
         if not self.radioFrequency == freq:
             self.radioFrequency = freq
             resp = radio.setFrequency(freq)
@@ -93,8 +88,8 @@ class AppEmail(ttk.Frame):
         f = open('stations.txt','r')
         d = json.load(f)
         f.close()
-        self.stations = d['sailmail']['stations']
-        self.frequencies = d['sailmail']['frequencies']
+        self.stations = d['wxfax']['stations']
+        self.frequencies = d['wxfax']['frequencies']
         return None
 
     def listLink(self):

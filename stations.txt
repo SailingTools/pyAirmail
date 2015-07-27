@@ -1,4 +1,5 @@
 {
+"sailmail": {
 "frequencies": {
 "OSY": [
 6330.5, 
@@ -182,5 +183,20 @@
 "WQLI952": "CM96av:Watsonville CA;P3,Ro;California", 
 "9Z4DH": "FK90eo:Trinidad;P3,Ro;Chaguaramas, Trinidad", 
 "WQAB964": "DM12jr:San Diego;P3,Ro;So. California"
+}
+},
+"wxfax": {
+"frequencies": {
+"VMC": [2628, 5100, 11030, 13920, 20469],
+"VMW": [5755, 7535, 10555, 15615, 18060],
+"5YE": [9044.9, 17447.5],
+"ZSJ": [4014, 7508, 13538, 18238]
+},
+"stations": {
+"VMC": "--:Charleville, Australia;--;Charleville, Australia",
+"VMW": "--:Wiluna, Australia;--;Wiluna, Australia",
+"5YE": "--:Nairobi, Kenya;--;Nairobi, Kenya",
+"ZSJ": "--:Cape Naval, South Africa;--;Cape Naval, South Africa"
+}
 }
 }
