@@ -4,6 +4,7 @@ import datetime
 import threading
 import math
 import os
+import pytz
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,9 +15,13 @@ class modemController():
         self.crc = None
         self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=True)
         self.setTimeout(0.05)
-        self.write()
-        self.wait_full_response(printOut=True)
+        self.response = None
+        self.post_init()
         return None
+
+    def post_init(self):
+        self.write_and_get_response('\r')
+        self.runInitCommands()
 
     def runInitCommands(self):
         commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 0', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27',
@@ -26,18 +31,16 @@ class modemController():
 'TXD 4', 'CSD 5', 'MYcall VJN4455', 'ARX 0', 'L 0', 'CWID 0', 'CONType 3', 'MYcall VJN4455']  
         # Excluded: 'TIME 18:00:00', 'DATE 09.11.14', 'ST 2', 'TERM 4', 'MYLEV 2',
         for c in commands:
-            self.write(c)
-            self.wait_full_response(printOut=True)
+            if c == 'RESTART':
+                self.restart()
+            else:
+                self.write_and_get_response(c, printOut=True)
         return None
 
     def setTimeout(self, timeout):
         return self.ser.setTimeout(timeout)
 
-    def readWaiting(self):
-        w = self.ser.inWaiting()
-        return self.ser.read(w)
-
-    def read(self, chunk_size=1024, retries=1, printOut=False):
+    def read(self, chunk_size=1024, retries=0, printOut=False):
         r = self.ser.read(chunk_size)
         counter = 0
         while (counter<retries):
@@ -50,48 +53,34 @@ class modemController():
             print(r.replace('\r','\n'))
         return r
 
-    def wait_full_response(self, timeout=10, retries=1, rate=0.01, printOut=False):
-        timeout = int(timeout)
-        stop_time = time.time() + timeout
-        # Wait for something to come up
-        w = self.ser.inWaiting()
-        if not w:
-            while (not w) and (time.time() < stop_time):
-                w = self.ser.inWaiting()
-        # If we didn't get a response before the timeout then return None
-        if not w:
-            return ''
-        # If we have something then see if there is more
-        r = self.readWaiting()
-        nr = ''
-        counter=0
-        while (counter<retries) and (time.time() < stop_time):
-            if rate:
-                time.sleep(rate)
-            nr = self.readWaiting()
-            if nr:
-                r += nr
-            else:
-                counter += 1
-        if printOut:
-            print(r.replace('\r', '\n'))
-        return r
-
     def write(self, cmd=''):
         self.ser.write('%s\r'%(cmd))
         return None
 
+    def write_and_get_response(self, command, chunk_size=1024, retries=0, printOut=False):
+        self.write(command)
+        return self.read(chunk_size=chunk_size, retries=retries, printOut=printOut)
+
+    def restart(self):
+        t = self.ser.timeout
+        self.setTimeout(1.0)
+        self.write_and_get_response('RESTART', printOut=True)
+        self.setTimeout(t)
+        return None
+
     def close(self):
         return self.ser.close()
-
-    def runInit(self):
-        return None
 
 class modemHostmodeController(modemController):
 
     def __init__(self, baud=57600, timeout=10):
         modemController.__init__(self, baud=baud, timeout=timeout)
         self.interruptFlag = False
+
+    def post_init(self):
+        self.hostmode_quit()
+        self.write_and_get_response('\r')
+        self.restart()
 
     def interrupt(self):
         self.interruptFlag = True
@@ -103,11 +92,15 @@ class modemHostmodeController(modemController):
         else:
             self.write('JHOST1')
             self.crc = None
-        return self.wait_full_response(printOut=True)
+        return self.read(printOut=True)
+
+    def hostmode_quit(self):
+        self.write_channel_and_get_response('JHOST0', channel=0)
+        return self.write_and_get_response('',printOut=True)
 
     def getChannelsWithOutput(self):
         # Poll Channel 255 to find what channels have output
-        s = bytearray(self.write_and_respond('G', channel=255))
+        s = bytearray(self.write_channel_and_get_response('G', channel=255))
         channels = []
         for c in s[2:]:
             if (c==255) or (c==0):
@@ -135,7 +128,7 @@ class modemHostmodeController(modemController):
                 d = d[:l]
         return (d, l)
  
-    def getChannelOutput(self, c, max_data_length=1024, max_retries=1, timeout=1, gpoll=True, read_length=0, report_increment=50000):
+    def getChannelOutput(self, c, max_data_length=1024, max_retries=1, timeout=1, gpoll=False, chunk_size=1024, report_increment=50000):
         self.interruptFlag = False
         timeout = int(timeout)
         self.response = bytearray(max_data_length)
@@ -153,7 +146,7 @@ class modemHostmodeController(modemController):
                         counter += 1
                     continue
             # Get the data
-            r = self.write_and_respond('G', channel=c, read_length=read_length)
+            r = self.write_channel_and_get_response('G', channel=c, chunk_size=chunk_size)
             (d, l) = self.checkResponse(r, c)
             if not d:
                 #print('No data on channel %i'%(c))
@@ -179,14 +172,9 @@ class modemHostmodeController(modemController):
         # Report the final data amount/time
         t = time.time() - start_time
         print('Read %i kB in %f seconds [%i b/s]'%(stop_byte/1000, t, int(stop_byte/t)))
-        self.response = self.data[:stop_byte]
+        self.response = self.response[:stop_byte]
         return self.response
         
-    def hostmode_quit(self):
-        self.write_and_respond('JHOST0', channel=0)
-        self.write()
-        return self.wait_full_response(printOut=True)
-
     def write_bin(self, message, channel=255):
         c = self.int2hex(channel)
         l = self.int2hex(len(message)-1)
@@ -197,13 +185,9 @@ class modemHostmodeController(modemController):
         self.writeHexString(s)
         return None
 
-    def write_and_respond(self, message, channel=255, read_length=0):
+    def write_channel_and_get_response(self, message, channel=255, chunk_size=1024):
         self.write_bin(message, channel=channel)
-        if read_length:
-            r = self.ser.read(read_length)
-            #print('Got %i bytes of data'%(len(r)))
-            return r
-        return self.wait_full_response(rate=0.01)
+        return self.read(chunk_size=chunk_size)
 
     def int2hex(self, channel):
         c = '%2s'%(hex(channel)[2:])
@@ -215,52 +199,199 @@ class modemHostmodeController(modemController):
         self.ser.write(bs)
         return None
 
+modem = modemHostmodeController()
+
 class Fax():
 
     def __init__(self, modem=None):
         self.modem = modemHostmodeController() if not modem else modem
         self.data = None
         self.xres = None
+        self.data_rate = None
+        self.max_data_length=(1024*4000)
+        self.timeout = 10
+        self.chunk = ''
+        self.chunk_lock = threading.Lock()
+        self.apt_lock = threading.Lock()
+        self.record_lock = threading.Lock()
 
-    def start(self):
-        print('Starting hostmode fax')
-        self.hostmode_start()
-        self.write_and_respond('@F%s'%(start_code), channel=0)
+        self.record_flag = False
+        self.apt_flag = False
+        self.receive_flag = False
+        self.gui_callback = None
+
+    def start(self, rate=16, lines_per_minute=120):
+        self.data_rate = self.getBaudrate()/rate
+        self.xres = int(self.data_rate*(float(60)/lines_per_minute))
+        print('Starting modem hostmode fax streaming at baudrate/%i = %i bytes/s'%(rate, self.data_rate))
+        start_code='1' if rate==32 else '17'
+        self.modem.hostmode_start()
+        self.modem.write_channel_and_get_response('@F%s'%(start_code), channel=0)
+        self.modem.write_channel_and_get_response('@F', channel=0)
         time.sleep(1.0)
+        # Start reading in data chunks and 
+        # monitoring for apt start/stop signals
+        self.receive_start()
+        self.apt_start()
  
     def quit(self):
         print('Closing hostmod fax')
-        self.write_and_respond('@F0', channel=0)
-        self.hostmode_quit()
+        self.apt_stop()
+        time.sleep(0.6)
+        self.receive_stop()
+        time.sleep(0.1)
+        self.modem.write_channel_and_get_response('@F0', channel=0)
+        self.modem.hostmode_quit()
+
+    def getBaudrate(self):
+        return self.modem.ser.getBaudrate()
+
+    def clear_buffer(self):
+        self.modem.write_channel_and_get_response('@F', channel=0)
+
+    def record_start(self):
+        print('Started receiving fax data on channel 252')
+        self.record_thread = threading.Thread(target=self.do_record)
+        self.record_thread.daemon = True
+        self.record_thread.start()
+        
+    def do_record(self, report_increment=50000):
+        print('Recording up to %i kB of fax data from channel 252'%(self.max_data_length/1000))
+        self.record_flag = True
+        if self.gui_callback:
+            self.gui_callback()
+        stop_time = time.time() + self.timeout
+        self.data = bytearray(self.max_data_length)
+        start_byte = 0; stop_byte = 0; ab = 0
+        start_time = time.time()
+        self.record_lock.acquire()
+        while (stop_byte < self.max_data_length) and (time.time() < stop_time) and self.record_flag:
+            # Get the latest data chunk 
+            self.record_lock.acquire()
+            d = self.chunk
+            # Get the place to insert in data buffer
+            stop_byte = self.max_data_length if stop_byte > self.max_data_length else start_byte + 256
+            # Add the data to the buffer
+            self.data[start_byte:stop_byte] = d
+            # Report on progress (print out)
+            if report_increment:
+                bb = int(stop_byte/report_increment)
+                if not ab == bb:
+                    t = time.time() - start_time
+                    print('Read %i kB in %f seconds [%i b/s]'%(stop_byte/1000, t, int(stop_byte/t)))
+            # Increment timeouts and counters
+            stop_time = time.time() + self.timeout
+            start_byte = stop_byte
+            ab = bb
+        if self.record_lock.locked():
+            self.record_lock.release()
+        self.record_flag = False
+        t = time.time() - start_time
+        print('Read %i kB in %f seconds [%i b/s]'%(stop_byte/1000, t, int(stop_byte/t)))
+        self.data = self.data[:stop_byte]
+        self.plot(align_data=True)
+        print('Stopped recording fax')
+        if self.gui_callback:
+            self.gui_callback()
  
-    def receive_start(self, lines=200, rate=32, lines_per_minute=120):
-        start_code='1' if rate==32 else '17'
-        self.xres = int((float(self.ser.getBaudrate())/rate)*(float(60)/lines_per_minute))
-        data_length=lines*self.fax_xres
+    def record_stop(self):
+        self.record_flag = False
+
+    def receive_start(self):
         channels = self.modem.getChannelsWithOutput()
         if 252 in channels:
-            print('Getting up to %i kB of fax data on Channel 252'%(data_length/1000))
-            self.fax_thread = threading.Thread(target=self.get_fax_stream)
-            self.fax_thread.daemon = True
-            self.fax_thread.start()
+            print('Started receiving fax data on channel 252')
+            self.monitor_thread = threading.Thread(target=self.get_chunk)
+            self.monitor_thread.daemon = True
+            self.monitor_thread.start()
         else:
             print('Channel 252 not streaming fax output')
-            self.data = None
         return None
 
     def receive_stop(self):
-        self.modem.interruptFlag = True
+        self.receive_flag = False
 
-    def get_fax_stream(self):
-        self.data = self.modem.getChannelOutput(252, max_data_length=data_length, max_retries=0, timeout=10, read_length=259, gpoll=False)
+    def get_chunk(self, chunk_size=259, max_retries=10):
+        self.receive_flag = True
+        stop_time = time.time() + self.timeout
+        retries = 0
+        while (time.time() < stop_time) and (retries < max_retries) and self.receive_flag:
+            c = 252
+            r = self.modem.write_channel_and_get_response('G', channel=c, chunk_size=chunk_size)
+            (d, l) = self.modem.checkResponse(r, c)
+            if (l == 256):
+                retries = 0
+                stop_time = time.time() + self.timeout
+                self.chunk = d
+                # Tell the record and apt loops that it can proceed with new chunk
+                if self.record_lock.locked():
+                    self.record_lock.release()
+                if self.apt_lock.locked():
+                    self.apt_lock.release()
+            else:
+                retries += 1
+        self.receive_flag = False
+        print('Stopped receiving fax data')
         return None
 
-    def plot(self, xres=None):
+    def apt_start(self):
+        print('Starting APT monitoring')
+        self.apt_flag = True
+        self.apt_thread = threading.Thread(target=self.apt_monitor)
+        self.apt_thread.daemon = True
+        self.apt_thread.start()
+
+    def apt_stop(self):
+        self.apt_flag = False
+
+    def apt_monitor(self, frequency=0.25, retries=10):
+        # Analyse data packets every <frequency> seconds,
+        # Once a signal is found then try to get <retries> continuous signals before 
+        stop_time = time.time() + self.timeout
+        counter = 0
+        self.apt_lock.acquire()
+        while (time.time() < stop_time) and self.apt_flag:
+            self.apt_lock.acquire()
+            d = self.chunk; 
+            if not self.record_flag:
+                if self.is_apt_signal(d, frequency=12):
+                    print('Found APT Start Signal #%i'%(counter))
+                    counter += 1
+                    if counter > retries:
+                        print('Starting Fax Recording')
+                        self.record_start()
+                    continue
+            else:
+                if self.is_apt_signal(d, frequency=8):
+                    print('Found APT Stop Signal #%i'%(counter))
+                    counter += 1
+                    if counter > retries:
+                        print('Stopping Fax Recording')
+                        self.record_stop()
+                    continue
+            time.sleep(frequency)
+            counter = 0
+            stop_time = time.time() + self.timeout
+        if self.apt_lock.locked():
+            self.apt_lock.release()
+        self.apt_flag = False
+        print('Stopping APT Monitor')
+        return None
+
+    def get_fax_stream(self):
+        print('Getting up to %i kB of fax data on Channel 252'%(self.max_data_length/1000))
+        self.data = self.modem.getChannelOutput(252, max_data_length=self.max_data_length, max_retries=0, timeout=10, chunk_size=259, gpoll=False)
+        self.plot()
+        return None
+
+    def plot(self, xres=None, show_image=False, save_image=True, save_data=True, align_data=False):
         if xres is None:
             xres = self.xres
         if not self.data:
             print('No fax data aquired yet')
             return None
+        if align_data:
+            self.align_data()
         a = np.array(bytearray(self.data))
         rows = len(a)/xres
         cropsize = xres*rows
@@ -268,16 +399,76 @@ class Fax():
         a = a.reshape((rows,xres))
         path = 'fax_images'
         os.mkdir(path) if not os.path.exists(path) else None
-        fname = '%s/%s.png'%(path, datetime.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
-        plt.imsave(fname, a, vmin=0, vmax=255, cmap='gray')
-        print('Saved fax image to %s'%(fname))
-        plt.imshow(a, vmin=0, vmax=255, cmap='gray')
-        plt.show()
+        timezone = pytz.timezone('utc')
+        utctime = datetime.datetime.now(tz=timezone)
+        fname = '%s/%s.png'%(path, utctime.strftime('%Y-%m-%d_%H%M%S'))
+        if save_image:
+            plt.imsave(fname, a, vmin=0, vmax=255, cmap='gray')
+            print('Saved fax image to %s'%(fname))
+        if save_data:
+            bin_fname = fname.replace('.png', '.bin')
+            self.save_data(bin_fname)
+            print('Saved binary fax data to %s'%(bin_fname))
+        if show_image:
+            plt.imshow(a, vmin=0, vmax=255, cmap='gray')
+            plt.show()
         return None
 
     def fax_data_compressy(self, axis=0):
         return self.data.compress([divmod(i,2)[1] for i in range(np.shape(d)[0])], axis=axis)
 
+    def save_data(self, fname):
+        f = open(fname, 'wb')
+        f.write(self.data)
+        f.close()
+        return None
+
+    def load_data(self, fname):
+        f = open(fname, 'rb')
+        self.data  = f.read()
+        f.close()
+        self.xres = 1800
+
+    def is_apt_signal(self, data, frequency=12, width=1):
+        # frequency=12 (start), frequency=8 (stop)
+        signal_pixel_width = frequency*self.xres/1800
+        l = len(data)/2
+        # Crop the spectrum info and take only the real part
+        s = np.abs(np.fft.fft(np.array(bytearray(data))))
+        s = s.real[1:l]
+        band_centre = (2*l/signal_pixel_width)
+        spectrum_average = np.average(np.abs(s))
+        band_average = np.average(np.abs(s[band_centre-width:band_centre+width]))
+        if band_average > spectrum_average*5:
+            return True
+        return False
+
+    def align_data(self, lines=[20,30,40,50]):
+        n = len(lines)
+        offset = 0.0
+        counter = 0
+        for line in lines:
+            t = self.get_image_offset(line)
+            if counter:
+                if abs(t-offset) > 30:
+                    print("Alignment data could not be ascertained")
+                    return None
+            # Keep a running average of the offset
+            counter += 1
+            offset = (offset*(counter-1) + t)/counter
+        offset = int(offset)
+        print('Aligning data with offset of %i'%(offset))
+        self.data = self.data[offset:]
+        return None
+
+    def get_image_offset(self, line, signal_width=90):
+        h = signal_width / 2
+        d = self.data[line*self.xres:(line+1)*self.xres] 
+        l = np.array(bytearray(d[-1*h:] + d + d[:h]))
+        a = np.zeros(self.xres)
+        for i in range(h, self.xres + h):
+            a[i-h] = np.average(l[i-h:i+h])
+        return a.argmax()
 
 class crcCheck():
 

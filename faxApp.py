@@ -3,8 +3,10 @@ from Tkconstants import *
 import ttk
 
 import json
+import time
 
 from icom import radio
+from modem import modem, Fax
 from widgets import LabeledEntry
 
 import matplotlib.pyplot as plt
@@ -23,6 +25,9 @@ class AppFax(ttk.Frame):
         self.readStationInfo()
 
         self.drawMenu()
+
+        self.fax = Fax(modem)
+        self.fax.gui_callback = self.buttons_update
 
     def updateMenus(self):
         self.stationDropDown.current(self.currentStation)
@@ -43,10 +48,14 @@ class AppFax(ttk.Frame):
         self.freqDropDown.state(['readonly'])
         self.freqDropDown.pack(side=RIGHT)
 
-        self.button_connect = tk.Button(self, text="Connect", command=self.connect)
+        self.button_connect = tk.Button(self, text="Start FaxMode", command=self.toggle_connect)
         self.button_connect.pack(side=LEFT)
-        self.button_disconnect = tk.Button(self, text="Disconnect",command=self.disconnect)
-        self.button_disconnect.pack(side=RIGHT)
+
+        self.button_record = tk.Button(self, text="Start Record", command=self.toggle_record)
+        self.button_record.pack(side=LEFT)
+
+        self.button_apt = tk.Button(self, text="Start APT", command=self.toggle_apt)
+        self.button_apt.pack(side=LEFT)
 
     def setConnectType(self):
         if not self.connectDropDown.current() == self.connectType:
@@ -76,13 +85,37 @@ class AppFax(ttk.Frame):
         self.textbox.insert(index,text+'\n')
         self.textbox.see(index)
 
-    def disconnect(self):
-        self.showText('Disconnecting')
+    def toggle_connect(self):
+        if self.fax.receive_flag:
+            self.fax.quit()
+        else:
+            self.fax.start()
+        time.sleep(0.1)
+        self.buttons_update()
         return None
 
-    def connect(self):
-        self.showText('Connecting')
+    def toggle_record(self):
+        if self.fax.record_flag:
+            self.fax.record_stop()
+        else:
+            self.fax.record_start()
+        time.sleep(0.1)
+        self.buttons_update()
         return None
+
+    def toggle_apt(self):
+        if self.fax.apt_flag:
+            self.fax.apt_stop()
+        else:
+            self.fax.apt_start()
+        time.sleep(0.1)
+        self.buttons_update()
+        return None
+
+    def buttons_update(self):
+        self.button_connect['text'] = 'Stop FaxMode' if self.fax.receive_flag else 'Start FaxMode'
+        self.button_record['text'] = 'Stop Recording' if self.fax.record_flag else 'Start Recording'
+        self.button_apt['text'] = 'Stop APT' if self.fax.apt_flag else 'Start APT'
 
     def readStationInfo(self):
         f = open('stations.txt','r')

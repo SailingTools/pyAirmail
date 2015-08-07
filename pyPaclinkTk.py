@@ -17,6 +17,7 @@ import pytz
 
 from widgets import LabeledEntry
 from icom import radio
+from modem import modem
 
 from scheduleApp import AppScheduler
 from scannerApp import AppScanner
@@ -114,6 +115,8 @@ class Application(ttk.Frame):
         json.dump(settings, f, indent=1)
         f.close()
         print('Quitting...')
+        modem.hostmode_quit()
+        modem.close()
         return None
 
     def setFromDict(self, d, parent=''):
