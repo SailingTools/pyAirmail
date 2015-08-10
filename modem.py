@@ -11,10 +11,9 @@ import matplotlib.pyplot as plt
 
 class modemController():
 
-    def __init__(self, baud=57600, timeout=10):
+    def __init__(self, baud=57600, timeout=0.05):
         self.crc = None
         self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=True)
-        self.setTimeout(0.05)
         self.response = None
         self.post_init()
         return None
@@ -73,7 +72,7 @@ class modemController():
 
 class modemHostmodeController(modemController):
 
-    def __init__(self, baud=57600, timeout=10):
+    def __init__(self, baud=57600, timeout=0.05):
         modemController.__init__(self, baud=baud, timeout=timeout)
         self.interruptFlag = False
 
@@ -199,7 +198,7 @@ class modemHostmodeController(modemController):
         self.ser.write(bs)
         return None
 
-modem = modemHostmodeController()
+#modem = modemHostmodeController()
 
 class Fax():
 
@@ -247,7 +246,7 @@ class Fax():
         return self.modem.ser.getBaudrate()
 
     def clear_buffer(self):
-        self.modem.write_channel_and_get_response('@F', channel=0)
+        return self.modem.write_channel_and_get_response('@F', channel=0)
 
     def record_start(self):
         print('Started receiving fax data on channel 252')
@@ -489,7 +488,7 @@ class crcCheck():
         return accu
  
     def makeCrcTable(self):
-        self.crc_table = range(256)
+        self.crc_table = [0 for i in range(256)]
         for index in range(256):
             accu = self.innerLoop(index)
             self.crc_table[index] = accu

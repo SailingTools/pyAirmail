@@ -48,7 +48,7 @@ class AppFax(ttk.Frame):
         self.freqDropDown.state(['readonly'])
         self.freqDropDown.pack(side=RIGHT)
 
-        self.button_connect = tk.Button(self, text="Start FaxMode", command=self.toggle_connect)
+        self.button_connect = tk.Button(self, text="Start FaxMode", command=self.connect)
         self.button_connect.pack(side=LEFT)
 
         self.button_record = tk.Button(self, text="Start Record", command=self.toggle_record)
@@ -56,6 +56,9 @@ class AppFax(ttk.Frame):
 
         self.button_apt = tk.Button(self, text="Start APT", command=self.toggle_apt)
         self.button_apt.pack(side=LEFT)
+
+        self.button_quit = tk.Button(self, text="Quit FaxMode", command=self.disconnect)
+        self.button_quit.pack(side=RIGHT)
 
     def setConnectType(self):
         if not self.connectDropDown.current() == self.connectType:
@@ -85,12 +88,19 @@ class AppFax(ttk.Frame):
         self.textbox.insert(index,text+'\n')
         self.textbox.see(index)
 
+    def connect(self):
+        self.fax.start()
+        self.buttons_update()
+
+    def disconnect(self):
+        self.fax.quit()
+        self.buttons_update()
+
     def toggle_connect(self):
         if self.fax.receive_flag:
             self.fax.quit()
         else:
             self.fax.start()
-        time.sleep(0.1)
         self.buttons_update()
         return None
 
@@ -99,7 +109,6 @@ class AppFax(ttk.Frame):
             self.fax.record_stop()
         else:
             self.fax.record_start()
-        time.sleep(0.1)
         self.buttons_update()
         return None
 
@@ -108,11 +117,11 @@ class AppFax(ttk.Frame):
             self.fax.apt_stop()
         else:
             self.fax.apt_start()
-        time.sleep(0.1)
         self.buttons_update()
         return None
 
     def buttons_update(self):
+        time.sleep(0.1)
         self.button_connect['text'] = 'Stop FaxMode' if self.fax.receive_flag else 'Start FaxMode'
         self.button_record['text'] = 'Stop Recording' if self.fax.record_flag else 'Start Recording'
         self.button_apt['text'] = 'Stop APT' if self.fax.apt_flag else 'Start APT'
