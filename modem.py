@@ -14,13 +14,12 @@ class modemController():
     def __init__(self, baud=57600, timeout=0.05):
         self.crc = None
         self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=True)
-        self.response = None
-        self.post_init()
-        return None
-
-    def post_init(self):
+        self.hostmode_quit()
         self.write_and_get_response('\r')
-        self.runInitCommands()
+        self.restart()
+        self.response = None
+        self.interruptFlag = False
+        self.hostmode = False
 
     def runInitCommands(self):
         commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 0', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27',
@@ -52,13 +51,26 @@ class modemController():
             print(r.replace('\r','\n'))
         return r
 
-    def write(self, cmd=''):
-        self.ser.write('%s\r'%(cmd))
+    def write(self, cmd='', newline='\r', channel=None):
+        if channel is None:
+            self.ser.write('%s%s'%(cmd, newline))
+        else:
+            self.__write_channel(cmd, channel=channel)
         return None
 
-    def write_and_get_response(self, command, chunk_size=1024, retries=0, printOut=False):
-        self.write(command)
+    def write_and_get_response(self, command, newline='\r', channel=None, chunk_size=1024, retries=0, printOut=False):
+        self.write(command, newline=newline, channel=channel)
         return self.read(chunk_size=chunk_size, retries=retries, printOut=printOut)
+
+    def __write_channel(self, message, channel=255):
+        c = self.int2hex(channel)
+        l = self.int2hex(len(message)-1)
+        m = message.encode('hex')
+        s = '%s 01 %s %s'%(c, l, m)
+        if self.crc:
+            s = 'AA AA %s %s'(s, hex(self.crc.do_calc(s))[2:])
+        self.writeHexString(s)
+        return None
 
     def restart(self):
         t = self.ser.timeout
@@ -70,17 +82,6 @@ class modemController():
     def close(self):
         return self.ser.close()
 
-class modemHostmodeController(modemController):
-
-    def __init__(self, baud=57600, timeout=0.05):
-        modemController.__init__(self, baud=baud, timeout=timeout)
-        self.interruptFlag = False
-
-    def post_init(self):
-        self.hostmode_quit()
-        self.write_and_get_response('\r')
-        self.restart()
-
     def interrupt(self):
         self.interruptFlag = True
        
@@ -91,15 +92,17 @@ class modemHostmodeController(modemController):
         else:
             self.write('JHOST1')
             self.crc = None
+        self.hostmode = True
         return self.read(printOut=True)
 
     def hostmode_quit(self):
-        self.write_channel_and_get_response('JHOST0', channel=0)
+        self.write_and_get_response('JHOST0', channel=0)
+        self.hostmode = False
         return self.write_and_get_response('',printOut=True)
 
     def getChannelsWithOutput(self):
         # Poll Channel 255 to find what channels have output
-        s = bytearray(self.write_channel_and_get_response('G', channel=255))
+        s = bytearray(self.write_and_get_response('G', channel=255))
         channels = []
         for c in s[2:]:
             if (c==255) or (c==0):
@@ -145,7 +148,7 @@ class modemHostmodeController(modemController):
                         counter += 1
                     continue
             # Get the data
-            r = self.write_channel_and_get_response('G', channel=c, chunk_size=chunk_size)
+            r = self.write_and_get_response('G', channel=c, chunk_size=chunk_size)
             (d, l) = self.checkResponse(r, c)
             if not d:
                 #print('No data on channel %i'%(c))
@@ -174,20 +177,6 @@ class modemHostmodeController(modemController):
         self.response = self.response[:stop_byte]
         return self.response
         
-    def write_bin(self, message, channel=255):
-        c = self.int2hex(channel)
-        l = self.int2hex(len(message)-1)
-        m = message.encode('hex')
-        s = '%s 01 %s %s'%(c, l, m)
-        if self.crc:
-            s = 'AA AA %s %s'(s, self.crc.do_calc(s.replace(' ','').decode(hex)))
-        self.writeHexString(s)
-        return None
-
-    def write_channel_and_get_response(self, message, channel=255, chunk_size=1024):
-        self.write_bin(message, channel=channel)
-        return self.read(chunk_size=chunk_size)
-
     def int2hex(self, channel):
         c = '%2s'%(hex(channel)[2:])
         return c.replace(' ', '0')
@@ -198,12 +187,12 @@ class modemHostmodeController(modemController):
         self.ser.write(bs)
         return None
 
-#modem = modemHostmodeController()
+modem = modemController()
 
 class Fax():
 
     def __init__(self, modem=None):
-        self.modem = modemHostmodeController() if not modem else modem
+        self.modem = modemController() if not modem else modem
         self.data = None
         self.xres = None
         self.data_rate = None
@@ -220,36 +209,47 @@ class Fax():
         self.gui_callback = None
 
     def start(self, rate=16, lines_per_minute=120):
-        self.data_rate = self.getBaudrate()/rate
-        self.xres = int(self.data_rate*(float(60)/lines_per_minute))
-        print('Starting modem hostmode fax streaming at baudrate/%i = %i bytes/s'%(rate, self.data_rate))
-        start_code='1' if rate==32 else '17'
-        self.modem.hostmode_start()
-        self.modem.write_channel_and_get_response('@F%s'%(start_code), channel=0)
-        self.modem.write_channel_and_get_response('@F', channel=0)
-        time.sleep(1.0)
+        if self.modem.hostmode:
+            self.data_rate = self.getBaudrate()/rate
+            self.xres = int(self.data_rate*(float(60)/lines_per_minute))
+            print('Starting modem hostmode fax streaming at baudrate/%i = %i bytes/s'%(rate, self.data_rate))
+            start_code='1' if rate==32 else '17'
+            self.modem.write_and_get_response('@F%s'%(start_code), channel=0)
+            self.modem.write_and_get_response('@F', channel=0)
+        else:
+            self.data_rate = int(38400.0/10.0)
+            self.xres = int(self.data_rate*(float(60)/lines_per_minute))
+            self.modem.write('FAX Mbaud 38400')
+            self.modem.write('FAX Fmfax')
         # Start reading in data chunks and 
         # monitoring for apt start/stop signals
+        time.sleep(0.1)
         self.receive_start()
-        self.apt_start()
+        #self.apt_start()
  
     def quit(self):
-        print('Closing hostmod fax')
-        self.apt_stop()
-        time.sleep(0.6)
-        self.receive_stop()
-        time.sleep(0.1)
-        self.modem.write_channel_and_get_response('@F0', channel=0)
-        self.modem.hostmode_quit()
+        if self.modem.hostmode:
+            print('Closing hostmode fax')
+            self.apt_stop()
+            time.sleep(0.6)
+            self.receive_stop()
+            time.sleep(0.1)
+            self.modem.write_and_get_response('@F0', channel=0)
+            self.modem.hostmode_quit()
+        else:
+            print('Sending term signal 255 to modem')
+            self.modem.write('\xff', newline='')
+            time.sleep(0.5)
+            self.modem.ser.readall()
 
     def getBaudrate(self):
         return self.modem.ser.getBaudrate()
 
     def clear_buffer(self):
-        return self.modem.write_channel_and_get_response('@F', channel=0)
+        return self.modem.write_and_get_response('@F', channel=0)
 
     def record_start(self):
-        print('Started receiving fax data on channel 252')
+        print('Starting Recording of Fax Stream')
         self.record_thread = threading.Thread(target=self.do_record)
         self.record_thread.daemon = True
         self.record_thread.start()
@@ -297,27 +297,34 @@ class Fax():
         self.record_flag = False
 
     def receive_start(self):
-        channels = self.modem.getChannelsWithOutput()
-        if 252 in channels:
-            print('Started receiving fax data on channel 252')
-            self.monitor_thread = threading.Thread(target=self.get_chunk)
-            self.monitor_thread.daemon = True
-            self.monitor_thread.start()
-        else:
-            print('Channel 252 not streaming fax output')
+        if self.modem.hostmode:
+            channels = self.modem.getChannelsWithOutput()
+            if not 252 in channels:
+                print('Channel 252 not streaming fax output')
+                return None
+        print('Starting receiving fax data on channel 252')
+        self.monitor_thread = threading.Thread(target=self.get_chunk)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
         return None
 
     def receive_stop(self):
         self.receive_flag = False
 
-    def get_chunk(self, chunk_size=259, max_retries=10):
+    def get_chunk(self, max_retries=10):
         self.receive_flag = True
         stop_time = time.time() + self.timeout
         retries = 0
         while (time.time() < stop_time) and (retries < max_retries) and self.receive_flag:
-            c = 252
-            r = self.modem.write_channel_and_get_response('G', channel=c, chunk_size=chunk_size)
-            (d, l) = self.modem.checkResponse(r, c)
+            # Get a chunk (depending on if we are in hostmode or not)
+            if self.modem.hostmode:
+                c = 252
+                r = self.modem.write_and_get_response('G', channel=c, chunk_size=259)
+                (d, l) = self.modem.checkResponse(r, c)
+            else:
+                l = 256
+                d = self.modem.read(chunk_size=l)
+            # If we have a valid chunk then process it otherwise increment the retry counter
             if (l == 256):
                 retries = 0
                 stop_time = time.time() + self.timeout
@@ -481,36 +488,39 @@ class crcCheck():
     def innerLoop(self, Data, accu=0):
         for j in range(8):
             if self.isOdd( Data^accu ):
-                accu = (accu+1)^self.c
+                accu = (accu >> 1)^self.c
             else:
-                accu = (accu+1)
-            Data += 1
+                accu = (accu >> 1)
+            Data = (Data >> 1)
         return accu
  
     def makeCrcTable(self):
         self.crc_table = [0 for i in range(256)]
         for index in range(256):
-            accu = self.innerLoop(index)
-            self.crc_table[index] = accu
+            self.crc_table[index] = self.innerLoop(index)
         return self.crc_table
 
     def calc_crc_ccitt(self, b):
         crc = self.crc
-        self.crc = ((crc + 8) & 255)^(self.crc_table[(crc^b) & 255])
+        self.crc = ((crc >> 8) & 255)^(self.crc_table[(crc^b) & 255])
 
-    def do_calc(self, src='\x1F\x00'):
+    def invert_crc(self):
+        #print('Before inverting: %i, %s'%(self.crc, hex(self.crc)))
+        self.crc = self.crc^int('ffff', base=16)
+        (i, r) = divmod(self.crc, 256)
+        self.crc = 256*r + i
+        #print('After inverting: %i, %s'%(self.crc, hex(self.crc)))
+        return self.crc
+        
+    def do_calc(self, src):
         # '\xFF\x01\x00\x47' (Standard G-poll on channel 255) Result should be 6b 55 = 27477
         # '\xFF\x01\x00' (Response to G-poll on channel 255) Result should be E7 19 = 59161
         # '\x1F\x00\x1E\x19' (Response on channel 31) Result is 1E 19 = 7705
         self.crc = int('ffff', base=16)
-        ba = bytearray(src)
+        ba = bytearray(src.replace(' ','').decode('hex'))
         for b in ba:
             self.calc_crc_ccitt(b)
 
-        # Invert the results
-        print('Before inverting: %i, %s'%(self.crc, hex(self.crc)))
-        self.crc = self.crc^int('ffff', base=16)
-        print('After inverting: %i, %s'%(self.crc, hex(self.crc)))
-
-        return self.crc
+        # Return the inverted results
+        return self.invert_crc()
 

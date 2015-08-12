@@ -79,7 +79,7 @@ def run_lzhuf(cmd, data):
 
     lzhuf_path = os.path.abspath(os.path.join("libexec", lzhuf))
     shutil.copy(os.path.abspath(lzhuf_path), cwd)
-    run = [lzhuf_path, cmd, "input", "output"]
+    run = [lzhuf_path, cmd, "input", "output", "0"]
     
     print "Running %s in %s" % (run, cwd)
 
