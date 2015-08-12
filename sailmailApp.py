@@ -7,6 +7,10 @@ import json
 from icom import radio
 from widgets import LabeledEntry
 
+from modem import modem_socket
+import sailmail
+import threading
+
 class AppEmail(ttk.Frame):
 
     def __init__(self, master=None):
@@ -18,6 +22,9 @@ class AppEmail(ttk.Frame):
         self.radioFrequency = 0
         self.connectType = 0
         self.readStationInfo()
+        
+        self.modem_socket = None
+        self.email_thread = None
 
         self.drawMenu()
 
@@ -62,11 +69,14 @@ class AppEmail(ttk.Frame):
                 radio.start_radio()
                 radio.remote(True)
                 self.setFrequency()
+                self.modem_socket = modem_socket("VJN4455")
             else:
                 self.stationDropDown.state(['disabled'])
                 self.freqDropDown.state(['disabled'])
                 radio.remote(False)
                 radio.close()
+                self.modem_socket.close()
+                self.modem_socket = None
         return True
 
     def setFrequency(self):
@@ -82,11 +92,21 @@ class AppEmail(ttk.Frame):
         self.textbox.see(index)
 
     def disconnect(self):
-        self.showText('Disconnecting')
+        print('Disconnect not yet implemented')        
+        return None
+
+    def _connect(self):
+        if self.connectType == 1:
+            station = self.stations.keys()[self.currentStation]
+            sailmail.send_and_receive(mode='Pactor', station=station, socket=self.modem_socket)
+        else:
+            sailmail.send_and_receive(mode='Telnet')
         return None
 
     def connect(self):
-        self.showText('Connecting')
+        self.email_thread = threading.Thread(target=self._connect)
+        self.email_thread.daemon = True
+        self.email_thread.start()
         return None
 
     def readStationInfo(self):

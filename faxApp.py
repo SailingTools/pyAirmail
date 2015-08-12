@@ -6,11 +6,10 @@ import json
 import time
 
 from icom import radio
-from modem import modem, Fax
+from modem import Fax
 from widgets import LabeledEntry
 
 import matplotlib.pyplot as plt
-import threading
 
 class AppFax(ttk.Frame):
 
@@ -26,8 +25,7 @@ class AppFax(ttk.Frame):
 
         self.drawMenu()
 
-        self.fax = Fax(modem)
-        self.fax.gui_callback = self.buttons_update
+        self.fax = None
 
     def updateMenus(self):
         self.stationDropDown.current(self.currentStation)
@@ -48,6 +46,9 @@ class AppFax(ttk.Frame):
         self.freqDropDown.state(['readonly'])
         self.freqDropDown.pack(side=RIGHT)
 
+        self.textbox = tk.Text(self)
+        self.textbox.pack(fill=X, expand=1)
+
         self.button_connect = tk.Button(self, text="Start FaxMode", command=self.connect)
         self.button_connect.pack(side=LEFT)
 
@@ -59,22 +60,6 @@ class AppFax(ttk.Frame):
 
         self.button_quit = tk.Button(self, text="Quit FaxMode", command=self.disconnect)
         self.button_quit.pack(side=RIGHT)
-
-    def setConnectType(self):
-        if not self.connectDropDown.current() == self.connectType:
-            self.connectType = self.connectDropDown.current()
-            if self.connectType == 1:
-                self.stationDropDown.state(['!disabled'])
-                self.freqDropDown.state(['!disabled'])
-                radio.start_radio()
-                radio.remote(True)
-                self.setFrequency()
-            else:
-                self.stationDropDown.state(['disabled'])
-                self.freqDropDown.state(['disabled'])
-                radio.remote(False)
-                radio.close()
-        return True
 
     def setFrequency(self):
         self.currentFrequency = self.freqDropDown.current()
@@ -89,11 +74,31 @@ class AppFax(ttk.Frame):
         self.textbox.see(index)
 
     def connect(self):
+        if self.fax:
+            print('Fax already running.  Try quitting and starting again.')
+            return None
+
+        radio.start_radio()
+        radio.remote(True)
+        self.setFrequency()
+
+        self.fax = Fax()
+        self.fax.gui_callback = self.buttons_update
+        time.sleep(2)
         self.fax.start()
+
         self.buttons_update()
 
     def disconnect(self):
+        if not self.fax:
+            return None
+
         self.fax.quit()
+        self.fax.close()
+
+        radio.remote(False)
+
+        self.fax = None
         self.buttons_update()
 
     def toggle_connect(self):
@@ -122,9 +127,12 @@ class AppFax(ttk.Frame):
 
     def buttons_update(self):
         time.sleep(0.1)
-        self.button_connect['text'] = 'Stop FaxMode' if self.fax.receive_flag else 'Start FaxMode'
-        self.button_record['text'] = 'Stop Recording' if self.fax.record_flag else 'Start Recording'
-        self.button_apt['text'] = 'Stop APT' if self.fax.apt_flag else 'Start APT'
+        if self.fax:
+            self.button_record['text'] = 'Stop Recording' if self.fax.record_flag else 'Start Recording'
+            self.button_apt['text'] = 'Stop APT' if self.fax.apt_flag else 'Start APT'
+        else:
+            self.button_record['text'] = 'Start Recording'
+            self.button_apt['text'] = 'Start APT'
 
     def readStationInfo(self):
         f = open('stations.txt','r')

@@ -15,7 +15,7 @@ class modemController():
         self.crc = None
         self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=True)
         self.hostmode_quit()
-        self.write_and_get_response('\r')
+        self.write_and_get_response('')
         self.restart()
         self.response = None
         self.interruptFlag = False
@@ -41,7 +41,7 @@ class modemController():
     def read(self, chunk_size=1024, retries=0, printOut=False):
         r = self.ser.read(chunk_size)
         counter = 0
-        while (counter<retries):
+        while (counter < retries):
             nr = self.ser.read(chunk_size)
             if nr:
                 r += nr
@@ -55,14 +55,14 @@ class modemController():
         if channel is None:
             self.ser.write('%s%s'%(cmd, newline))
         else:
-            self.__write_channel(cmd, channel=channel)
+            self.write_channel(cmd, channel=channel)
         return None
 
     def write_and_get_response(self, command, newline='\r', channel=None, chunk_size=1024, retries=0, printOut=False):
         self.write(command, newline=newline, channel=channel)
         return self.read(chunk_size=chunk_size, retries=retries, printOut=printOut)
 
-    def __write_channel(self, message, channel=255):
+    def write_channel(self, message, channel=255):
         c = self.int2hex(channel)
         l = self.int2hex(len(message)-1)
         m = message.encode('hex')
@@ -187,12 +187,65 @@ class modemController():
         self.ser.write(bs)
         return None
 
-modem = modemController()
+#modem = modemController()
+
+######################
+# Modem Socket class for compatability with Sailmail Telnet sockets 
+######################
+
+class modem_socket():
+
+    def __init__(self, mycall):
+        self._mycall = mycall
+
+        print('Initialising modem')
+        self.modem = modemController()
+
+        print('Running init commands')
+        commands = ['MYcall %s'%(self._mycall), 'TOnes 4', 'CHOBell 0', 'LFignore 1', 'PTCH 31', 'MAXE 35']
+        for c in commands:
+            self.modem.write_and_get_response(c, printOut=True)
+
+        self.modem.hostmode_start()
+        return None
+
+    def readto(ser, end="cmd:", line=''):
+        if not ser.inWaiting():
+            return None
+        while not line[-5:] == end:
+            line += ser.read(1)
+        lines = line.split('\r')
+        return lines
+
+    def connect(self, targetcall):
+        self.modem.write_and_get_response('C %s'%(targetcall), channel=31)
+        
+    def disconnect(self):
+        self.modem.write_and_get_response('D', channel=31)
+        return None
+
+    def force_disconnect(self):
+        self.modem.write_and_get_response('DD')
+
+    def send(self, msg):
+        return self.modem.write(msg)
+
+    def recv(self, size):
+        return self.modem.read(chunk_size=size)
+
+    def close(self):
+        self.modem.hostmode_quit()
+        self.modem.close()
+        return None
+
+#####################
+# Fax Controller
+#####################
 
 class Fax():
 
-    def __init__(self, modem=None):
-        self.modem = modemController() if not modem else modem
+    def __init__(self, serbaud=57600, modem=None):
+        self.modem = modemController(baud=serbaud) if not modem else modem
         self.data = None
         self.xres = None
         self.data_rate = None
@@ -208,14 +261,16 @@ class Fax():
         self.receive_flag = False
         self.gui_callback = None
 
-    def start(self, rate=16, lines_per_minute=120):
+    def start(self, rate=16, lines_per_minute=120, hostmode=True):
+        if hostmode:
+            self.modem.hostmode_start()
+        # Now start up the fax stream
         if self.modem.hostmode:
             self.data_rate = self.getBaudrate()/rate
             self.xres = int(self.data_rate*(float(60)/lines_per_minute))
             print('Starting modem hostmode fax streaming at baudrate/%i = %i bytes/s'%(rate, self.data_rate))
             start_code='1' if rate==32 else '17'
             self.modem.write_and_get_response('@F%s'%(start_code), channel=0)
-            self.modem.write_and_get_response('@F', channel=0)
         else:
             self.data_rate = int(38400.0/10.0)
             self.xres = int(self.data_rate*(float(60)/lines_per_minute))
@@ -223,7 +278,7 @@ class Fax():
             self.modem.write('FAX Fmfax')
         # Start reading in data chunks and 
         # monitoring for apt start/stop signals
-        time.sleep(0.1)
+        time.sleep(1.0)
         self.receive_start()
         #self.apt_start()
  
@@ -241,6 +296,9 @@ class Fax():
             self.modem.write('\xff', newline='')
             time.sleep(0.5)
             self.modem.ser.readall()
+
+    def close(self):
+        self.modem.close()
 
     def getBaudrate(self):
         return self.modem.ser.getBaudrate()
@@ -311,10 +369,13 @@ class Fax():
     def receive_stop(self):
         self.receive_flag = False
 
-    def get_chunk(self, max_retries=10):
+    def get_chunk(self, max_retries=10, report_increment=0):
         self.receive_flag = True
-        stop_time = time.time() + self.timeout
+        start_time = time.time()
+        stop_time = start_time + self.timeout
         retries = 0
+        chunk_counter = 0
+        ab = 0
         while (time.time() < stop_time) and (retries < max_retries) and self.receive_flag:
             # Get a chunk (depending on if we are in hostmode or not)
             if self.modem.hostmode:
@@ -329,13 +390,23 @@ class Fax():
                 retries = 0
                 stop_time = time.time() + self.timeout
                 self.chunk = d
+                chunk_counter += 1
                 # Tell the record and apt loops that it can proceed with new chunk
                 if self.record_lock.locked():
                     self.record_lock.release()
                 if self.apt_lock.locked():
                     self.apt_lock.release()
             else:
+                #print('Retrying')
                 retries += 1
+            # Do some reporting if asked for it
+            if report_increment:
+                stop_byte = chunk_counter*256
+                bb = int(stop_byte/report_increment)
+                if not ab == bb:
+                    t = time.time() - start_time
+                    print('Received %i kB in %f seconds [%i b/s]'%(stop_byte/1000, t, int(stop_byte/t)))
+                ab = bb
         self.receive_flag = False
         print('Stopped receiving fax data')
         return None

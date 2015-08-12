@@ -14,6 +14,8 @@ import pickle
 import smtplib
 from datetime import datetime
 
+from modem import modem_socket
+
 MAILDIR = "/home/mark/Maildir"
 
 sys.path.insert(0, "..")
@@ -131,7 +133,6 @@ class WinLinkMessage:
         data = ""
         while len(data) < l:
             data += s.recv(l - len(data))
-
         return data
 
     def read_from_socket(self, s):
@@ -405,9 +406,6 @@ class WinLinkCMS:
         return self.__messages[index]
 
     def send_messages(self, messages):
-        #if len(messages) != 1:
-        #    raise Exception("Sorry, batch not implemented yet")
-
         #self._connect()
         #self._login()
 
@@ -447,22 +445,6 @@ class WinLinkTelnet(WinLinkCMS):
         WinLinkCMS.__init__(self, callsign)
 
     def _connect(self):
-        class sock_file:
-            def __init__(self):
-                self.__s = 0
-
-            def read(self, len):
-                return self.__s.recv(len)
-
-            def write(self, buf):
-                return self.__s.send(buf)
-
-            def connect(self, spec):
-                return self.__s.connect(spec)
-
-            def close(self):
-                self.__s.close()
-
         self._conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._conn.connect((self.__server, self.__port))
 
@@ -486,22 +468,122 @@ class WinLinkTelnet(WinLinkCMS):
 
         self._send_ssid()
 
-class WinLinkRMSPacket(WinLinkCMS):
-    def __init__(self, callsign, remote, agw):
+class WinLinkPactor(WinLinkCMS):
+    def __init__(self, callsign, remote, socket=None):
         self.__remote = remote
-        self.__agw = agw
+        self._conn = socket
         WinLinkCMS.__init__(self, callsign)
 
     def _connect(self):
-        self._conn = agw.AGW_AX25_Connection(self.__agw, self._callsign)
+        if not self._conn:
+            self._conn = modem_socket(self._callsign)
         self._conn.connect(self.__remote)
 
     def _disconnect(self):
+        self._send("FQ")
         self._conn.disconnect()
+        self._conn.close()
+        print('Connection closed')
 
     def _login(self):
         resp = self._recv()
         self._send_ssid(resp)
+
+class OutQueue():
+
+    def __init__(self, MAILDIR = "/home/cubie/Maildir"):
+        self.queue_file = "%s/outqueue"%(MAILDIR)
+        self.email_list = []
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.queue_file):
+            f = open( self.queue_file, "rb" )
+            self.email_list = pickle.load( f )
+            f.close()
+        else:
+            self.email_list = []
+        print("Found %i emails queued"%(len(self.email_list)) )
+
+    def message_list(self):
+        return [WinLinkMessage(email=e) for e in self.email_list]
+
+    def put(self, email):
+        self.email_list.append(email)
+
+    def remove(self, indexes):
+        # Remove emails from the back
+        indexes.sort()
+        indexes.reverse()
+        for i in indexes:
+            self.email_list.pop(i)
+            print("Removed message %i from outbox"%(i))
+        self.save()
+
+    def save(self):
+        f = open( self.queue_file, "wb" )
+        pickle.dump( self.email_list, f )
+        f.close()
+    
+    def length(self):
+        return len(self.email_list)
+
+def send_and_receive(mode='Telnet', station='', socket=None):
+
+    pactor = True if mode[0] == 'P' else False
+    if pactor:
+        print("Checking email with Pactor")
+    else:
+        print("Checking email with Telnet")
+
+    if pactor and (not station):
+        print('No station defined. Quitting')
+        return None
+
+    if pactor and (not modem_socket):
+        try:
+            modem_socket = modem_socket()
+        except:
+            print('ERROR: Could not open a new modem socket')
+            return None
+    
+    q = OutQueue()
+    if q.length() > 0:
+        print("Compressing email messages for sending")
+        message_list = q.message_list()
+
+    if pactor:
+        print('Connecting to station %s'%(station))
+        wl = WinLinkPactor("VJN4455", station, socket=socket)
+    else:
+        print("Connecting to telnet server")
+        wl = WinLinkTelnet("VJN4455")
+    wl._connect()
+    wl._login()
+
+    if q.length() > 0:
+        print("Sending Messages")
+        success = wl.send_messages(message_list)
+        if success:
+            q.remove(range(q.length()))
+
+    print("Getting messages")
+    count = wl.get_messages()
+    wl._disconnect()
+
+    print("Forwarding %i retrieved messages to localhost"%(count))
+    sender = 'cubie@localhost'
+    receivers = ['cubie@localhost']
+    s = smtplib.SMTP('localhost')
+    for i in range(0, count):
+        e = wl.get_message(i).to_email()
+        s.sendmail(sender, receivers, e.as_string() ) 
+    s.close()
+
+
+#################
+# Test functions 
+#################
 
 def test_telnet():
     # Test Telnet connection
@@ -543,79 +625,10 @@ Body: %i\r
     wl = WinLinkTelnet("VJN4455")
     wl.send_messages([m])
 
-class OutQueue():
+####################
 
-    def __init__(self, MAILDIR = "/home/cubie/Maildir"):
-        self.queue_file = "%s/outqueue"%(MAILDIR)
-        self.email_list = []
-        self.load()
-
-    def load(self):
-        if os.path.exists(self.queue_file):
-            f = open( self.queue_file, "rb" )
-            self.email_list = pickle.load( f )
-            f.close()
-        else:
-            self.email_list = []
-        print("Found %i emails queued"%(len(self.email_list)) )
-
-    def message_list(self):
-        return [WinLinkMessage(email=e) for e in self.email_list]
-
-    def put(self, email):
-        self.email_list.append(email)
-
-    def remove(self, indexes):
-        # Remove emails from the back
-        indexes.sort()
-        indexes.reverse()
-        for i in indexes:
-            self.email_list.pop(i)
-            print("Removed message %i from outbox"%(i))
-        self.save()
-
-    def save(self):
-        f = open( self.queue_file, "wb" )
-        pickle.dump( self.email_list, f )
-        f.close()
-    
-    def length(self):
-        return len(self.email_list)
-
-import pdb
 if __name__== "__main__":
-    print("Checking email with Telnet")
-    q = OutQueue()
-
-    if q.length() > 0:
-        print("Compressing email messages for sending")
-        message_list = q.message_list()
-
-    print("Connecting to telnet server")
-    wl = WinLinkTelnet("VJN4455")
-    wl._connect()
-    wl._login()
-
-    if q.length() > 0:
-        print("Sending Messages")
-        success = wl.send_messages(message_list)
-        if success:
-            q.remove(range(q.length()))
-
-    print("Getting messages")
-    #pdb.set_trace()
-    count = wl.get_messages()
-    wl._disconnect()
-
-    print("Forwarding %i retrieved messages to localhost"%(count))
-    sender = 'cubie@localhost'
-    receivers = ['cubie@localhost']
-    s = smtplib.SMTP('localhost')
-    for i in range(0, count):
-        e = wl.get_message(i).to_email()
-        s.sendmail(sender, receivers, e.as_string() ) 
-    s.close()
-
+    run_telnet()
     
       
    
