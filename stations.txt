@@ -190,13 +190,23 @@
 "VMC": [2628, 5100, 11030, 13920, 20469],
 "VMW": [5755, 7535, 10555, 15615, 18060],
 "5YE": [9044.9, 17447.5],
-"ZSJ": [4014, 7508, 13538, 18238]
+"ZSJ": [4014, 7508, 13538, 18238],
+"GYA": [2618.5, 4610, 8040, 11086.5],
+"DDH": [3855, 7880, 13882.5],
+"OXT": [5850, 9360, 13855, 17510],
+"NMG": [4317.9, 8503.9, 12789.9, 17146.4],
+"NMF": [4235, 6340.5, 9110, 12750]
 },
 "stations": {
 "VMC": "--:Charleville, Australia;--;Charleville, Australia",
 "VMW": "--:Wiluna, Australia;--;Wiluna, Australia",
 "5YE": "--:Nairobi, Kenya;--;Nairobi, Kenya",
-"ZSJ": "--:Cape Naval, South Africa;--;Cape Naval, South Africa"
+"ZSJ": "--:Cape Naval, South Africa;--;Cape Naval, South Africa",
+"GYA": "--:Northwood, UK;--;Northwood, UK",
+"DDH": "--:Hamburg, Germany;--;Hamburg, Germany",
+"OXT": "--:Skamlebaek, Denmark;--;Skamlebaek, Denmark",
+"NMG": "--:New Orleans, Louisiana;--;New Orleans, Louisiana",
+"NMF": "--:Boston, Massachusetts;--;Boston, Massachusetts"
 }
 }
 }

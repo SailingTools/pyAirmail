@@ -628,7 +628,7 @@ Body: %i\r
 ####################
 
 if __name__== "__main__":
-    run_telnet()
+    send_and_receive(mode='Telnet')
     
       
    

@@ -24,28 +24,33 @@ class AppScanner(ttk.Frame):
 
         self.incFreq = LabeledEntry(self, labelText = "Increments [kHz]:", entryWidth = 8, entryValidateStr = r'^[0-9]*\.?[0-9]?$')
         self.incFreq.pack(fill=X)
-        self.incFreq.set('10.0')
+        self.incFreq.set('5.0')
 
         self.waitTime = LabeledEntry(self, labelText = "Seconds per Frequency [s]:", entryWidth = 8, entryValidateStr = r'^[0-9]*\.?[0-9]?$')
         self.waitTime.pack(fill=X)
-        self.waitTime.set('1.0')
+        self.waitTime.set('0.3')
 
         buttons = ttk.Frame(self)
         buttons.pack(fill=X)
 
         self.button_start = tk.Button(buttons, text="Start Scan", command=self.start_scan)
         self.button_start.pack(side=LEFT)
+
         self.button_stop = tk.Button(buttons, text="Stop",command=self.stop_scan)
         self.button_stop.pack(side=RIGHT)
+        self.button_up = tk.Button(buttons, text="+",command=self.upinc)
+        self.button_up.pack(side=RIGHT)
+        self.button_dn = tk.Button(buttons, text="-",command=self.dninc)
+        self.button_dn.pack(side=RIGHT)
 
-        self.scanThread = threading.Thread(target=self.do_scan)
-        self.scanThread.daemon = True
-        self.stopper = False
         return None
 
     def start_scan(self):
+        self.scanThread = threading.Thread(target=self.do_scan)
+        self.scanThread.daemon = True
+        self.stopper = False
         self.scanThread.start()
-
+        
     def do_scan(self):
         self.stopper = False
         f_start = int(float(self.startFreq.get())*10)
@@ -61,8 +66,9 @@ class AppScanner(ttk.Frame):
         print "Scanning will take %.01f"%(w_time*len(freqs))
 
         # Scan through all the frequencies
-        radio.start_radio()
-        radio.remote(True)
+        if not radio.is_remote():
+            radio.start_radio()
+            radio.remote(True)
         for freq in freqs:
             if self.stopper:
                 break
@@ -70,9 +76,24 @@ class AppScanner(ttk.Frame):
             time.sleep(w_time)
 
         # Turn off remote 
-        radio.remote(False)
-        radio.close()
+        #radio.remote(False)
+        #radio.close()
+        self.startFreq.set("%.1f"%(float(freq)/10.0))
         return None
+
+    def upinc(self):
+        f_inc = int(float(self.incFreq.get())*10)
+        freq = radio.getFrequency()*10
+        freq += f_inc
+        radio.setFrequency(freq)
+	self.startFreq.set("%.1f"%(float(freq)/10.0))
+
+    def dninc(self):
+        f_inc = int(float(self.incFreq.get())*10)
+        freq = radio.getFrequency()*10
+        freq -= f_inc
+        radio.setFrequency(freq)
+	self.startFreq.set("%.1f"%(float(freq)/10.0))
 
     def stop_scan(self):
         self.stopper = True

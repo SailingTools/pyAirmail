@@ -23,6 +23,8 @@ from scannerApp import AppScanner
 from sailmailApp import AppEmail
 from faxApp import AppFax
 
+os.chdir(os.path.dirname(__file__))
+
 def setPath(obj, path, value):
     pp = path.split('.')
     if len(pp) > 1:
@@ -91,7 +93,7 @@ class Application(ttk.Frame):
 
     def runClock(self):
         timezone = pytz.timezone('utc')
-        while True:
+        while self.clock:
             utctime = datetime.now(tz=timezone)
             self.clock['text'] = "%s utc"%(utctime.strftime("%H:%M:%S"))
             time.sleep(1)

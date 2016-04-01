@@ -13,6 +13,7 @@ class modemController():
 
     def __init__(self, baud=57600, timeout=0.05):
         self.crc = None
+        self.cmdinf = '01'
         self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=True)
         self.hostmode_quit()
         self.write_and_get_response('')
@@ -20,6 +21,7 @@ class modemController():
         self.response = None
         self.interruptFlag = False
         self.hostmode = False
+        self.good_chunks = 0
 
     def runInitCommands(self):
         commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 0', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27',
@@ -47,6 +49,8 @@ class modemController():
                 r += nr
             else:
                 counter += 1
+        if self.crc:
+            r = self.crc.decode(r)
         if printOut:
             print(r.replace('\r','\n'))
         return r
@@ -62,14 +66,23 @@ class modemController():
         self.write(command, newline=newline, channel=channel)
         return self.read(chunk_size=chunk_size, retries=retries, printOut=printOut)
 
-    def write_channel(self, message, channel=255):
+    def encode(self, message, channel):
         c = self.int2hex(channel)
         l = self.int2hex(len(message)-1)
         m = message.encode('hex')
-        s = '%s 01 %s %s'%(c, l, m)
+        s = '%s %s %s %s'%(c, self.cmdinf, l, m)
         if self.crc:
-            s = 'AA AA %s %s'(s, hex(self.crc.do_calc(s))[2:])
-        self.writeHexString(s)
+            s = self.crc.encode(s)
+        return s
+
+    def write_channel(self, message, channel=255):
+        self.writeHexString(self.encode(message, channel))
+        self.incrementCounter()
+        return None
+
+    def incrementCounter(self, ):
+        if self.crc:
+            self.cmdinf = '81' if self.cmdinf == '01' else '01'
         return None
 
     def restart(self):
@@ -123,11 +136,15 @@ class modemController():
             print('WARNING: Returned data does not match polled channel')
             return (None, 0)
         if not l == dl:
-            print('WARNING: Data length (%i) does not match stated amount (%i)'%(dl, l))
+            print('WARNING: Data length (%i) does not match stated amount (%i). After %i good chunks.'%(dl, l, self.good_chunks))
+            self.good_chunks = 0
             if dl < l:
                 d.extend('\x00'*(l-dl))
             else:
                 d = d[:l]
+        else:
+            self.good_chunks += 1
+        #   print('Good chunk')
         return (d, l)
  
     def getChannelOutput(self, c, max_data_length=1024, max_retries=1, timeout=1, gpoll=False, chunk_size=1024, report_increment=50000):
@@ -202,7 +219,9 @@ class modem_socket():
         self.modem = modemController()
 
         print('Running init commands')
-        commands = ['MYcall %s'%(self._mycall), 'TOnes 4', 'CHOBell 0', 'LFignore 1', 'PTCH 31', 'MAXE 35']
+        commands = ['MYcall %s'%(self._mycall), 'PTCH 31', 'MAXE 35',
+            'LF 0', 'CM 0', 'REM 0', 'BOX 0', 'MAIL 0', 'CHOB 0', 'UML 0',
+            'TONES 4', 'MARK 1600', 'SPACE 1400', 'CWID 0', 'CONType 3']
         for c in commands:
             self.modem.write_and_get_response(c, printOut=True)
 
@@ -217,6 +236,11 @@ class modem_socket():
         lines = line.split('\r')
         return lines
 
+    def hostmode_init(self):
+        commands = ['#TONES 4', '#MYLEV 3', '#CWID 0', '#CONType 3', 'I %s'%(self._mycall)]
+        for c in commands:
+            self.modem.write_and_get_response(c, channel=31)
+
     def connect(self, targetcall):
         self.modem.write_and_get_response('C %s'%(targetcall), channel=31)
         
@@ -228,10 +252,10 @@ class modem_socket():
         self.modem.write_and_get_response('DD')
 
     def send(self, msg):
-        return self.modem.write(msg)
+        return self.modem.write_and_get_response(msg, channel=31)
 
     def recv(self, size):
-        return self.modem.read(chunk_size=size)
+        return self.modem.getChannelOutput(31)
 
     def close(self):
         self.modem.hostmode_quit()
@@ -304,7 +328,10 @@ class Fax():
         return self.modem.ser.getBaudrate()
 
     def clear_buffer(self):
-        return self.modem.write_and_get_response('@F', channel=0)
+        if self.modem.hostmode:
+            print('Clearing Fax Data Buffer')
+            self.modem.write_and_get_response('@F', channel=0, printOut=True)
+        return None
 
     def record_start(self):
         print('Starting Recording of Fax Stream')
@@ -370,6 +397,9 @@ class Fax():
         self.receive_flag = False
 
     def get_chunk(self, max_retries=10, report_increment=0):
+        print("Timeout = %f"%(self.modem.ser.timeout))
+        self.clear_buffer()
+
         self.receive_flag = True
         start_time = time.time()
         stop_time = start_time + self.timeout
@@ -553,6 +583,23 @@ class crcCheck():
         self.c = int('8408', base=16)
         self.makeCrcTable()
 
+    def encode(self, s):
+        return 'AA AA %s %s'%(self.stuff(s), self.do_calc(s))
+
+    def decode(self, s, check_crc=True):
+        crc = s[-2:]
+        body = self.destuff(s[2:-2])
+        if check_crc:
+            if not self.do_calc(body.encode('hex')).decode('hex') == crc:
+                print('WARNING: CRC check failed')
+        return body
+
+    def destuff(self, s):
+        return ''.join([s[i] for i in range(len(s)) if (i==0) or (s[i-1] != '\xaa')])
+
+    def stuff(self, s):
+        return s.upper().replace('AA', 'AA 00') 
+
     def isOdd(self, num):
         return bool(divmod(num, 2)[1])
 
@@ -582,7 +629,7 @@ class crcCheck():
         self.crc = 256*r + i
         #print('After inverting: %i, %s'%(self.crc, hex(self.crc)))
         return self.crc
-        
+
     def do_calc(self, src):
         # '\xFF\x01\x00\x47' (Standard G-poll on channel 255) Result should be 6b 55 = 27477
         # '\xFF\x01\x00' (Response to G-poll on channel 255) Result should be E7 19 = 59161
@@ -593,5 +640,7 @@ class crcCheck():
             self.calc_crc_ccitt(b)
 
         # Return the inverted results
-        return self.invert_crc()
+        s = '%04s'%(hex(self.invert_crc())[2:])
+        s = s.replace(' ','0')
+        return s
 
