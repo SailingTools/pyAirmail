@@ -23,14 +23,15 @@ class modemController():
         self.hostmode = False
         self.good_chunks = 0
 
-    def runInitCommands(self):
-        commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 0', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27',
+        self.init_commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 0', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27',
 'PTCH 31', 'MAXE 35', 'LF 0', 'CM 0', 'REM 0', 'BOX 0', 'MAIL 0', 'CHOB 0', 'UML 0', 'TRX S 0', 'TRX DU 0',
 'U *1', 'CHO 25', 'BK 24', 'FSKA 250', 'PSKA 330', 'PAC PRB 0', 'PAC CM 0', 'PAC CB 0', 'PAC M 0',
 'PAC US 10', 'FR MO 0', 'SYS SERN', 'MY *SCSPTC*', 'LICENSE', 'TONES 2', 'MARK 1600', 'SPACE 1400', 
 'TXD 4', 'CSD 5', 'MYcall VJN4455', 'ARX 0', 'L 0', 'CWID 0', 'CONType 3', 'MYcall VJN4455']  
         # Excluded: 'TIME 18:00:00', 'DATE 09.11.14', 'ST 2', 'TERM 4', 'MYLEV 2',
-        for c in commands:
+
+    def runInitCommands(self):
+        for c in self.init_commands:
             if c == 'RESTART':
                 self.restart()
             else:
@@ -268,8 +269,8 @@ class modem_socket():
 
 class Fax():
 
-    def __init__(self, serbaud=57600, modem=None):
-        self.modem = modemController(baud=serbaud) if not modem else modem
+    def __init__(self, baud=57600, timeout=0.05, modem=None):
+        self.modem = modemController(baud=baud, timeout=timeout) if not modem else modem
         self.data = None
         self.xres = None
         self.data_rate = None
@@ -285,6 +286,13 @@ class Fax():
         self.receive_flag = False
         self.gui_callback = None
 
+        self.runInitCommands()
+
+    def runInitCommands(self):
+        self.modem.init_commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 1', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27', 'PTCH 31', 'MAXE 35', 'LF 0', 'CM 0', 'REM 0', 'BOX 0', 'MAIL 0', 'CHOB 0', 'UML 0', 'TRX S 0', 'TRX DU 0', 'U *1', 'CHO 25', 'BK 24', 'ST 2', 'PAC PRB 0', 'PAC CM 0', 'PAC CB 0', 'PAC M 0', 'PAC US 10', 'FR MO 0', 'SYS SERN', 'MY *SCSPTC*', 'LICENSE']
+        #Excluded: 'TERM 4', 'TIME 17:35:46', 'DATE 04.04.16'
+        return self.modem.runInitCommands()
+
     def start(self, rate=16, lines_per_minute=120, hostmode=True):
         if hostmode:
             self.modem.hostmode_start()
@@ -294,6 +302,8 @@ class Fax():
             self.xres = int(self.data_rate*(float(60)/lines_per_minute))
             print('Starting modem hostmode fax streaming at baudrate/%i = %i bytes/s'%(rate, self.data_rate))
             start_code='1' if rate==32 else '17'
+            for p in ['%M1', 'FAX Dev 500', 'FAX FR 3', 'FAX MB 57600']:
+                self.modem.write_and_get_response(p, channel=0)
             self.modem.write_and_get_response('@F%s'%(start_code), channel=0)
         else:
             self.data_rate = int(38400.0/10.0)
@@ -397,8 +407,8 @@ class Fax():
         self.receive_flag = False
 
     def get_chunk(self, max_retries=10, report_increment=0):
-        print("Timeout = %f"%(self.modem.ser.timeout))
-        self.clear_buffer()
+        #print("Timeout = %f"%(self.modem.ser.timeout))
+        #self.clear_buffer()
 
         self.receive_flag = True
         start_time = time.time()
@@ -587,6 +597,9 @@ class crcCheck():
         return 'AA AA %s %s'%(self.stuff(s), self.do_calc(s))
 
     def decode(self, s, check_crc=True):
+        if not len(s) > 4:
+            print('WARNING: Response not long enough for CRC check')
+            return s
         crc = s[-2:]
         body = self.destuff(s[2:-2])
         if check_crc:
@@ -623,11 +636,11 @@ class crcCheck():
         self.crc = ((crc >> 8) & 255)^(self.crc_table[(crc^b) & 255])
 
     def invert_crc(self):
-        #print('Before inverting: %i, %s'%(self.crc, hex(self.crc)))
+        print('Before inverting: %i, %s'%(self.crc, hex(self.crc)))
         self.crc = self.crc^int('ffff', base=16)
         (i, r) = divmod(self.crc, 256)
         self.crc = 256*r + i
-        #print('After inverting: %i, %s'%(self.crc, hex(self.crc)))
+        print('After inverting: %i, %s'%(self.crc, hex(self.crc)))
         return self.crc
 
     def do_calc(self, src):
