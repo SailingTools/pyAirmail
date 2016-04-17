@@ -21,6 +21,7 @@ class AppEmail(ttk.Frame):
         self.currentFrequency = 0
         self.radioFrequency = 0
         self.connectType = 0
+        self.disconnecting = False
         self.readStationInfo()
         
         self.modem_socket = None
@@ -92,7 +93,13 @@ class AppEmail(ttk.Frame):
         self.textbox.see(index)
 
     def disconnect(self):
-        print('Disconnect not yet implemented')        
+        if self.disconnecting:
+            print('Forcing Disconnect...')
+            self.modem_socket.force_disconnect()
+        else:
+            print('Disconnecting...')
+            self.modem_socket.disconnect()
+            self.disconnecting = True
         return None
 
     def _connect(self):

@@ -302,6 +302,7 @@ class WinLinkCMS:
         self._callsign = callsign
         self.__messages = []
         self._conn = None
+        self.nlchar = '\r'
 
     def __ssid(self):
         return "[AirMail-3.3.081-B2FHIM$]"
@@ -312,11 +313,11 @@ class WinLinkCMS:
 
     def __recv(self):
         resp = ""
-        while not resp.endswith("\r\n"):
+        while not resp.endswith(self.nlchar):
             resp += self._conn.recv(1)
 
             if re.findall("Login \(.*\):", resp) or re.findall("Password \(.*\):", resp):
-                resp += ">\r\n"
+                resp += ">%s"%(self.nlchar)
                 break
 
         resp = resp.strip()
@@ -440,9 +441,10 @@ class WinLinkCMS:
 
 class WinLinkTelnet(WinLinkCMS):
     def __init__(self, callsign, server="pop3.sailmail.com", port=50001):
+        WinLinkCMS.__init__(self, callsign)
         self.__server = server
         self.__port = port
-        WinLinkCMS.__init__(self, callsign)
+        self.nlchar = '\r\n'
 
     def _connect(self):
         self._conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -470,9 +472,9 @@ class WinLinkTelnet(WinLinkCMS):
 
 class WinLinkPactor(WinLinkCMS):
     def __init__(self, callsign, remote, socket=None):
+        WinLinkCMS.__init__(self, callsign)
         self.__remote = remote
         self._conn = socket
-        WinLinkCMS.__init__(self, callsign)
 
     def _connect(self):
         if not self._conn:
@@ -487,7 +489,7 @@ class WinLinkPactor(WinLinkCMS):
 
     def _login(self):
         resp = self._recv()
-        self._send_ssid(resp)
+        self._send_ssid()
 
 class OutQueue():
 
@@ -529,7 +531,6 @@ class OutQueue():
         return len(self.email_list)
 
 def send_and_receive(mode='Telnet', station='', socket=None):
-
     pactor = True if mode[0] == 'P' else False
     if pactor:
         print("Checking email with Pactor")
@@ -540,9 +541,9 @@ def send_and_receive(mode='Telnet', station='', socket=None):
         print('No station defined. Quitting')
         return None
 
-    if pactor and (not modem_socket):
+    if pactor and (not socket):
         try:
-            modem_socket = modem_socket()
+            socket = modem_socket()
         except:
             print('ERROR: Could not open a new modem socket')
             return None
@@ -628,7 +629,8 @@ Body: %i\r
 ####################
 
 if __name__== "__main__":
-    send_and_receive(mode='Telnet')
+    s = modem_socket("VJN4455")
+    send_and_receive(mode='Pactor', station='OSY', socket=s)
     
       
    

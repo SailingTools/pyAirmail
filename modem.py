@@ -36,6 +36,7 @@ class modemController():
                 self.restart()
             else:
                 self.write_and_get_response(c, printOut=True)
+            time.sleep(0.2)
         return None
 
     def setTimeout(self, timeout):
@@ -215,6 +216,7 @@ class modem_socket():
 
     def __init__(self, mycall):
         self._mycall = mycall
+        self.recv_buffer = bytearray()
 
         print('Initialising modem')
         self.modem = modemController()
@@ -237,26 +239,47 @@ class modem_socket():
         lines = line.split('\r')
         return lines
 
+    def breakin(self):
+        return self.send('%I')
+
     def hostmode_init(self):
         commands = ['#TONES 4', '#MYLEV 3', '#CWID 0', '#CONType 3', 'I %s'%(self._mycall)]
         for c in commands:
             self.modem.write_and_get_response(c, channel=31)
 
     def connect(self, targetcall):
-        self.modem.write_and_get_response('C %s'%(targetcall), channel=31)
+        self.modem.write_channel('C %s'%(targetcall), channel=31)
         
     def disconnect(self):
-        self.modem.write_and_get_response('D', channel=31)
+        self.modem.write_channel('D', channel=31)
         return None
 
     def force_disconnect(self):
-        self.modem.write_and_get_response('DD')
+        self.modem.write_channel('DD', channel=31)
 
     def send(self, msg):
-        return self.modem.write_and_get_response(msg, channel=31)
+        return self.modem.write_channel(msg, channel=31)
 
     def recv(self, size):
-        return self.modem.getChannelOutput(31)
+        c = 31
+        chunk_size=10240
+        output = bytearray()
+        # Check and get whatever is in the receive buffer
+        channels = self.modem.getChannelsWithOutput()
+        if c in channels:
+            r = self.modem.write_and_get_response('G', channel=c, chunk_size=chunk_size)
+            (d, l) = self.modem.checkResponse(r, c)
+            if d:
+                self.recv_buffer += d
+                print(str(d))
+        # Get the number of bytes requested from the recv_buffer
+        for i in range(size):
+            if self.recv_buffer:
+                output += bytearray([self.recv_buffer.pop(0)])
+            else:
+                break
+        # Return bytes as a string
+        return str(output)
 
     def close(self):
         self.modem.hostmode_quit()
