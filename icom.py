@@ -54,6 +54,10 @@ class radioController():
         return None
 
     def setFrequency(self, freq):
+        """
+        m = USB, o = AM, q = AFS, s = AFS, t = AFS, w = AFS, x = CW
+        0 = Power Level (?)
+        """
         print('Changing frequency: %.01f'%(float(freq/10.0)))
         self.write_sentence("CCFSI,%06i,%06i,m,0"%(freq,freq))
 

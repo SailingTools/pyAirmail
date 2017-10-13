@@ -14,7 +14,7 @@ class modemController():
     def __init__(self, baud=57600, timeout=0.05):
         self.crc = None
         self.cmdinf = '01'
-        self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=True)
+        self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=False)
         self.hostmode_quit()
         self.write_and_get_response('')
         self.restart()
@@ -294,6 +294,8 @@ class Fax():
 
     def __init__(self, baud=57600, timeout=0.05, modem=None):
         self.modem = modemController(baud=baud, timeout=timeout) if not modem else modem
+        self.baud = self.getBaudrate()
+        self.ptch = 31
         self.data = None
         self.xres = None
         self.data_rate = None
@@ -312,22 +314,25 @@ class Fax():
         self.runInitCommands()
 
     def runInitCommands(self):
-        self.modem.init_commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 1', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27', 'PTCH 31', 'MAXE 35', 'LF 0', 'CM 0', 'REM 0', 'BOX 0', 'MAIL 0', 'CHOB 0', 'UML 0', 'TRX S 0', 'TRX DU 0', 'U *1', 'CHO 25', 'BK 24', 'ST 2', 'PAC PRB 0', 'PAC CM 0', 'PAC CB 0', 'PAC M 0', 'PAC US 10', 'FR MO 0', 'SYS SERN', 'MY *SCSPTC*', 'LICENSE']
+        self.modem.init_commands = ['VER', 'RESTART', 'SERB', 'TRX RTS 1', 'AM', 'TR 0', 'PT', 'QRTC 4', 'ESC 27', 'PTCH %i'%(self.ptch), 'MAXE 35', 'LF 0', 'CM 0', 'REM 0', 'BOX 0', 'MAIL 0', 'CHOB 0', 'UML 0', 'TRX S 0', 'TRX DU 0', 'U *1', 'CHO 25', 'BK 24', 'ST 2', 'PAC PRB 0', 'PAC CM 0', 'PAC CB 0', 'PAC M 0', 'PAC US 10', 'FR MO 0', 'SYS SERN', 'MY *SCSPTC*', 'LICENSE']
         #Excluded: 'TERM 4', 'TIME 17:35:46', 'DATE 04.04.16'
         return self.modem.runInitCommands()
 
     def start(self, rate=16, lines_per_minute=120, hostmode=True):
         if hostmode:
             self.modem.hostmode_start()
+            time.sleep(0.5)
         # Now start up the fax stream
         if self.modem.hostmode:
             self.data_rate = self.getBaudrate()/rate
             self.xres = int(self.data_rate*(float(60)/lines_per_minute))
             print('Starting modem hostmode fax streaming at baudrate/%i = %i bytes/s'%(rate, self.data_rate))
             start_code='1' if rate==32 else '17'
-            for p in ['%M1', 'FAX Dev 500', 'FAX FR 3', 'FAX MB 57600']:
-                self.modem.write_and_get_response(p, channel=0)
-            self.modem.write_and_get_response('@F%s'%(start_code), channel=0)
+            for p in ['%M1', '#FAX Dev 500', '#FAX FR 3', '#FAX MB %s'%(int(self.baud))]:
+                print('Writing hostmode command: %s'%(p))
+                self.modem.write_and_get_response(p, channel=self.ptch)
+                time.sleep(0.5)
+            self.modem.write_and_get_response('@F%s'%(start_code), channel=self.ptch)
         else:
             self.data_rate = int(38400.0/10.0)
             self.xres = int(self.data_rate*(float(60)/lines_per_minute))
@@ -335,7 +340,7 @@ class Fax():
             self.modem.write('FAX Fmfax')
         # Start reading in data chunks and 
         # monitoring for apt start/stop signals
-        time.sleep(1.0)
+        time.sleep(0.5)
         self.receive_start()
         #self.apt_start()
  
@@ -346,7 +351,7 @@ class Fax():
             time.sleep(0.6)
             self.receive_stop()
             time.sleep(0.1)
-            self.modem.write_and_get_response('@F0', channel=0)
+            self.modem.write_and_get_response('@F0', channel=self.ptch)
             self.modem.hostmode_quit()
         else:
             print('Sending term signal 255 to modem')
@@ -363,7 +368,7 @@ class Fax():
     def clear_buffer(self):
         if self.modem.hostmode:
             print('Clearing Fax Data Buffer')
-            self.modem.write_and_get_response('@F', channel=0, printOut=True)
+            self.modem.write_and_get_response('@F', channel=self.ptch, printOut=True)
         return None
 
     def record_start(self):
@@ -460,7 +465,9 @@ class Fax():
                 if self.apt_lock.locked():
                     self.apt_lock.release()
             else:
-                #print('Retrying')
+                if retries > 0:
+                    print('Retrying (Length = %i, Chunks = %i)'%(l, chunk_counter))
+                #self.clear_buffer()
                 retries += 1
             # Do some reporting if asked for it
             if report_increment:
@@ -524,7 +531,7 @@ class Fax():
         self.plot()
         return None
 
-    def plot(self, xres=None, show_image=False, save_image=True, save_data=True, align_data=False):
+    def plot(self, fname=None, xres=None, show_image=False, save_image=True, save_data=True, align_data=False):
         if xres is None:
             xres = self.xres
         if not self.data:
@@ -541,7 +548,8 @@ class Fax():
         os.mkdir(path) if not os.path.exists(path) else None
         timezone = pytz.timezone('utc')
         utctime = datetime.datetime.now(tz=timezone)
-        fname = '%s/%s.png'%(path, utctime.strftime('%Y-%m-%d_%H%M%S'))
+        if not fname:
+            fname = '%s/%s.png'%(path, utctime.strftime('%Y-%m-%d_%H%M%S'))
         if save_image:
             plt.imsave(fname, a, vmin=0, vmax=255, cmap='gray')
             print('Saved fax image to %s'%(fname))
@@ -583,7 +591,7 @@ class Fax():
             return True
         return False
 
-    def align_data(self, lines=[20,30,40,50]):
+    def align_data(self, lines=[20,30,40]):
         n = len(lines)
         offset = 0.0
         counter = 0

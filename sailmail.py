@@ -13,6 +13,7 @@ import re
 import pickle
 import smtplib
 from datetime import datetime
+from dateutil import parser
 
 from modem import modem_socket
 
@@ -238,7 +239,16 @@ class WinLinkMessage:
         text = e.get_payload()
 
         m  = 'MID: %s\r\n'%(e['Message-ID'])
-        m += 'Date: %s\r\n'%(e['Date'])
+
+        # Convert the date/time format
+        ds = e['Date']
+        try:
+            t = parser.parse(ds)
+            ds = t.strftime('%Y/%m/%d %H:%M')
+        except:
+            print("Cannot change date format.  Leaving as is.")
+        m += 'Date: %s\r\n'%(ds)
+
         m += 'Type: Private\r\n'
         m += 'From: smtp:%s\r\n'%(e['From'])
         #m += 'From: smtp:"Tuuletar"\r\n'
