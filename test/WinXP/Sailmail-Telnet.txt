@@ -1,0 +1,27 @@
+2014/11/05 08:53:07 Opening connection to: pop3.sailmail.com:50001
+2014/11/05 08:53:07 Connected to: pop3.sailmail.com: [72.3.227.249:50001]
+Login (80426036): VJN4455
+Password (80426036): 23367723
+Login accepted for VJN4455
+[SailMail-3.5.059-B2FHIM$]
+(am|ls:6xZ1Jg8K,em:h3z)
+{SFI = 129 on 2014/11/05 06:10z}
+
+Welcome to Sailmail Internet access!
+
+VJN4455 de WRD719 QTC 1 msg 255 char>
+[AirMail-3.3.081-B2FHIM$]
+;(am|em:h1,g:AH00ru)
+; WRD719 de VJN4455
+FF
+; VJN4455 de WRD719 QTC: 1 227 186
+FC EM vjn4455_421 227 186 0
+F> B8
+FS Y
+Receiving vjn4455_421 "TEST TEST"...Decoded OK
+; WRD719 de VJN4455
+FF
+FQ
+; VJN4455 de WRD719 SK
+2014/11/05 08:53:15 Telnet Port Disconnected
+
