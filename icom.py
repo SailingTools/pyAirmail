@@ -4,7 +4,10 @@ import time
 class radioController():
     
     def __init__(self):
-        self.ser = serial.Serial(port='/dev/icom802', baudrate=4800, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=10)
+        try:
+            self.ser = serial.Serial(port='/dev/icom802', baudrate=4800, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=10)
+        except:
+            self.ser = None
 
     def do_checksum(self, payload):
         ba = bytearray()
@@ -18,11 +21,12 @@ class radioController():
         checksum = self.do_checksum(payload)
         command = "$" + payload + "*" + checksum.upper()
         #print("#  Command:  " + command)
-        self.ser.write(command + "\r\n")
-        if get_response:
-            response = self.ser.readline()
-            #print("#  Response: " + response[:-2])
-            return response
+        if self.ser:
+	    self.ser.write(command + "\r\n")
+            if get_response:
+                response = self.ser.readline()
+                #print("#  Response: " + response[:-2])
+                return response
         return ''
 
     def is_remote(self):
