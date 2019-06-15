@@ -78,9 +78,9 @@ class AppFax(ttk.Frame):
             print('Fax already running.  Try quitting and starting again.')
             return None
 
-        radio.start_radio()
-        radio.remote(True)
-        self.setFrequency()
+        #radio.start_radio()
+        #radio.remote(True)
+        #self.setFrequency()
 
         self.fax = Fax()
         self.fax.gui_callback = self.buttons_update

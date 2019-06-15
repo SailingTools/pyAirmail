@@ -1,11 +1,20 @@
 import serial
 import time
+from icom_programmer import IcomProgrammer
+
 
 class radioController():
     
     def __init__(self):
         try:
-            self.ser = serial.Serial(port='/dev/icom802', baudrate=4800, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=10)
+            self.ser = serial.Serial(
+                port='/dev/icom',
+                baudrate=4800,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE, 
+                stopbits=serial.STOPBITS_ONE, 
+                timeout=10
+            )
         except:
             self.ser = None
 
@@ -22,7 +31,7 @@ class radioController():
         command = "$" + payload + "*" + checksum.upper()
         #print("#  Command:  " + command)
         if self.ser:
-	    self.ser.write(command + "\r\n")
+            self.ser.write(command + "\r\n")
             if get_response:
                 response = self.ser.readline()
                 #print("#  Response: " + response[:-2])
@@ -73,6 +82,37 @@ class radioController():
 
     def open(self):
         self.ser.open()
+
+
+class radioController706(IcomProgrammer):
+    
+    def __init__(self, ser = None):
+        # Set the radio 
+        self.radio_id = 0x58
+
+        if ser is None:
+            self.serial = None
+            self.baud_rate = '19200'
+            self.port = '/dev/icom'
+            success = self.init_serial()
+            if not success:
+                raise Exception('Serial connection not established')
+            '''
+            ser = serial.Serial(
+                port='/dev/icom',
+                baudrate=4800,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE, 
+                stopbits=serial.STOPBITS_ONE, 
+                timeout=10
+            )
+            self.serial = ser
+            '''
+        else:
+            self.serial = ser
+        
+
+
 
 ###############
 

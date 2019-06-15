@@ -14,7 +14,7 @@ class modemController():
     def __init__(self, baud=57600, timeout=0.05):
         self.crc = None
         self.cmdinf = '01'
-        self.ser=serial.Serial(port='/dev/modemSCS', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=False)
+        self.ser=serial.Serial(port='/dev/pactor', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=False)
         self.hostmode_quit()
         self.write_and_get_response('')
         self.restart()
@@ -40,7 +40,8 @@ class modemController():
         return None
 
     def setTimeout(self, timeout):
-        return self.ser.setTimeout(timeout)
+        self.ser.timeout = timeout
+        return self.ser.timeout
 
     def read(self, chunk_size=1024, retries=0, printOut=False):
         r = self.ser.read(chunk_size)
@@ -341,7 +342,7 @@ class Fax():
         # Start reading in data chunks and 
         # monitoring for apt start/stop signals
         time.sleep(0.5)
-        self.receive_start()
+        #self.receive_start()
         #self.apt_start()
  
     def quit(self):
@@ -363,7 +364,7 @@ class Fax():
         self.modem.close()
 
     def getBaudrate(self):
-        return self.modem.ser.getBaudrate()
+        return self.modem.ser.baudrate
 
     def clear_buffer(self):
         if self.modem.hostmode:
