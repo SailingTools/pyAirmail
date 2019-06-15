@@ -92,28 +92,43 @@ class radioController706(IcomProgrammer):
 
         if ser is None:
             self.serial = None
-            self.baud_rate = '19200'
+            self.baud_rate = '1200'
             self.port = '/dev/icom'
             success = self.init_serial()
             if not success:
                 raise Exception('Serial connection not established')
-            '''
-            ser = serial.Serial(
-                port='/dev/icom',
-                baudrate=4800,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE, 
-                stopbits=serial.STOPBITS_ONE, 
-                timeout=10
-            )
-            self.serial = ser
-            '''
         else:
             self.serial = ser
         
+    def is_remote(self):
+        return True
 
+    def getFrequency(self):
+        return self.curfreq
 
+    def start_radio(self):
+        pass
+
+    def restart_radio(self):
+        pass
+
+    def remote(self, on):
+        pass
+
+    def setFrequency(self, freq):
+        print('Changing frequency: %.01f'%(float(freq/10.0)))
+        self.curfreq = float(freq/10.0)
+        self.set_vfo_freq(float(freq/10000.0))
+
+    def close(self):
+        self.serial.close()
+
+    def stop_radio(self):
+        self.serial.close()
+
+    def open(self):
+        self.serial.open()
 
 ###############
 
-radio = radioController()
+radio = radioController706()

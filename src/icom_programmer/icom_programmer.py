@@ -21,8 +21,9 @@
 # ***************************************************************************
 
 import os, sys, re, operator, datetime, time, subprocess
-import atexit, serial, platform, zipfile
+import atexit, serial, platform, zipfile, struct
 
+PYVERSION = 2
 VERSION = 1.6
 
 # NOTE: Versions 1.6 and above are written in Python 3
@@ -451,7 +452,9 @@ class IcomIO:
           self.port,
           self.baud_rate,
           parity = serial.PARITY_NONE,
-          timeout = 1000,
+          bytesize=serial.EIGHTBITS,
+          stopbits=serial.STOPBITS_ONE,
+          timeout = 0.25,
           rtscts = 0
         )
         self.serial.flushOutput()
@@ -469,7 +472,8 @@ class IcomIO:
       c = 0
       if(len(s) > 0):c = s[0]
       reply.append(c)
-      self.debug_print('%02x ' % c,False)
+      #self.debug_print('%02x ' % c,False)
+      self.debug_print("%02x "%struct.unpack('B', s)[0], False)
       count += 1
     self.debug_print('')
     return reply
@@ -500,14 +504,17 @@ class IcomIO:
     self.debug_print('Write Radio: ',False)
     for c in com:
       self.debug_print('%02x ' % c,False)
-      self.serial.write(bytes([c]))
+      #self.serial.write(bytes([c]))
+      self.serial.write(struct.pack("B", c))
     self.debug_print('')
     # discard echo reply
     self.read_radio_n(len(com))
 
   def read_radio_response(self):
     reply = self.read_radio_n(6)
-    return reply[4] == 0xfb # meaning no errors
+    #success = (reply[4] == 0xfb) # meaning no errors
+    success = (struct.unpack('B', reply[4])[0] == 0xfb)
+    return success
 
   def convert_bcd(self,n,count):
     n = int(n)
@@ -517,22 +524,21 @@ class IcomIO:
       n //= 100
     return bcd
 
-  def send_com_core(self,c,data = False):
+  def get_com(self, c, data = False):
     com = [0xfe,0xfe,self.radio_id,0xe0,c]
     if(data):
       com += data
     com.append(0xfd)
+    return com
+
+  def send_com_core(self,c,data = False):
+    com = self.get_com(c, data)
     self.write_radio(com)
     return com
     
   def send_com(self,c,data = False):
     com = self.send_com_core(c,data)
-    print("DONE SENDING COME CORE")
-    #reply = self.read_radio_n(len(com))
-    #import pdb;pdb.set_trace()
-    #r = (reply[4] == 0xfb)
-    r = read_radio_response()
-    print("DONE READING RESPINSE")
+    r = self.read_radio_response()
     if(not r):
       err = 'Error: ' + self.render_list_as_hex(com)
       self.debug_print(err)

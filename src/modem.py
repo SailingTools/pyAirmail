@@ -14,7 +14,15 @@ class modemController():
     def __init__(self, baud=57600, timeout=0.05):
         self.crc = None
         self.cmdinf = '01'
-        self.ser=serial.Serial(port='/dev/pactor', baudrate=baud, bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=timeout, xonxoff=False)
+        self.ser=serial.Serial(
+            port='/dev/pactor', 
+            baudrate=baud, 
+            bytesize=serial.EIGHTBITS, 
+            parity=serial.PARITY_NONE, 
+            stopbits=serial.STOPBITS_ONE, 
+            timeout=timeout, 
+            xonxoff=False
+        )
         self.hostmode_quit()
         self.write_and_get_response('')
         self.restart()
